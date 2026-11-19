@@ -12,6 +12,8 @@ import TocPanel from './TocPanel.jsx'
 import SearchPanel from './SearchPanel.jsx'
 import BookmarksPanel from './BookmarksPanel.jsx'
 import SettingsPanel from './SettingsPanel.jsx'
+import SyncOffer from '../components/SyncOffer.jsx'
+import { checkForNewerPosition, noteBookmarkDeleted, scheduleSync } from '../services/sync/sync.js'
 
 export default function Reader({ id }) {
   const containerRef = useRef()
@@ -30,6 +32,8 @@ export default function Reader({ id }) {
   const [bookmarks, setBookmarks] = useState([])
   const [cfiLib, setCfiLib] = useState(null)
   const searchState = useRef({ query: '', results: [] })
+  const [offer, setOffer] = useState(null)   // anderes Gerät war woanders
+  const offerRef = useRef(null)
 
   // ---- Buch laden ----
   useEffect(() => {
@@ -41,6 +45,8 @@ export default function Reader({ id }) {
       const [book, blob, progress] = await Promise.all([getBook(id), getFile(id), getProgress(id)])
       if (!book || !blob) throw new Error('Buch nicht gefunden.')
       if (!alive) return
+      // Gleich im Hintergrund nachsehen, ob ein anderes Gerät woanders ist
+      const offerPromise = checkForNewerPosition(id, progress ?? null).catch(() => null)
       setMeta(book)
       updateBook(id, { lastOpenedAt: Date.now() })
       setBookmarks(await listBookmarks(id))
@@ -96,6 +102,12 @@ export default function Reader({ id }) {
       await view.init({ lastLocation: progress?.cfi, showTextStart: true })
       setToc(view.book.toc ?? [])
       setReady(true)
+
+      const o = await offerPromise
+      if (!alive) { o?.release(); return }
+      offerRef.current = o
+      setOffer(o)
+      setBookmarks(await listBookmarks(id)) // evtl. neue Lesezeichen von anderen Geräten
     }
 
     open().catch(err => { console.error(err); if (alive) setError(err.message || String(err)) })
@@ -103,6 +115,9 @@ export default function Reader({ id }) {
     return () => {
       alive = false
       clearTimeout(saveTimer)
+      offerRef.current?.release()
+      offerRef.current = null
+      scheduleSync(1500)
       view?.close()
       view?.remove()
       viewRef.current = null
@@ -149,16 +164,29 @@ export default function Reader({ id }) {
 
   async function toggleBookmark() {
     if (!loc) return
-    if (current) await deleteBookmark(current.id)
+    if (current) { await deleteBookmark(current.id); noteBookmarkDeleted(current.id) }
     else await addBookmark({
       id: newId(), bookId: id, cfi: loc.startCfi, label: loc.chapter,
       excerpt: loc.excerpt, fraction: loc.fraction, createdAt: Date.now(),
     })
     setBookmarks(await listBookmarks(id))
+    scheduleSync(2000)
   }
   async function removeBookmark(bm) {
     await deleteBookmark(bm.id)
+    noteBookmarkDeleted(bm.id)
     setBookmarks(await listBookmarks(id))
+  }
+
+  function answerOffer(jump) {
+    const o = offerRef.current
+    if (jump && o) {
+      if (o.remote.cfi) viewRef.current?.goTo(o.remote.cfi)
+      else viewRef.current?.goToFraction(o.remote.fraction ?? 0)
+    }
+    o?.release()
+    offerRef.current = null
+    setOffer(null)
   }
 
   const goTo = target => { viewRef.current?.goTo(target); setPanel(null) }
@@ -179,6 +207,8 @@ export default function Reader({ id }) {
         aria-label={current ? 'Lesezeichen entfernen' : 'Lesezeichen setzen'} disabled={!ready}>
         <Icon name={current ? 'bookmarkFilled' : 'bookmark'} />
       </button>
+
+      {offer && <SyncOffer offer={offer} onJump={() => answerOffer(true)} onStay={() => answerOffer(false)} />}
 
       <main className="reader-view" ref={containerRef}>
         {!ready && !error && <div className="reader-loading">Buch wird geöffnet …</div>}

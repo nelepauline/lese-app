@@ -7,6 +7,8 @@ import { percent } from '../lib/format.js'
 import { useAudio } from '../player/AudioProvider.jsx'
 import Cover from '../components/Cover.jsx'
 import Icon from '../components/Icon.jsx'
+import SyncPanel from './SyncPanel.jsx'
+import { useSyncState } from '../services/sync/sync.js'
 
 const FILTERS = [
   ['all', 'Alle'],
@@ -22,6 +24,8 @@ export default function Library() {
   const [message, setMessage] = useState(null)
   const fileInput = useRef()
   const audio = useAudio()
+  const sync = useSyncState()
+  const [showSync, setShowSync] = useState(false)
 
   const refresh = useCallback(async () => {
     const [list, prog] = await Promise.all([listBooks(), getAllProgress()])
@@ -71,9 +75,15 @@ export default function Library() {
     <div className={`library ${audio.book ? 'has-mini-player' : ''}`}>
       <header className="library-header">
         <h1>Bibliothek</h1>
-        <button className="btn btn-primary" onClick={() => fileInput.current.click()} disabled={!!busy}>
-          <Icon name="plus" size={18} /> Hinzufügen
-        </button>
+        <div className="header-actions">
+          <button className={`icon-btn ${sync.connected ? (sync.error ? 'sync-warn' : 'sync-on') : ''}`}
+            onClick={() => setShowSync(true)} aria-label="Geräte abgleichen" title="Geräte abgleichen">
+            <Icon name="cloud" />
+          </button>
+          <button className="btn btn-primary" onClick={() => fileInput.current.click()} disabled={!!busy}>
+            <Icon name="plus" size={18} /> Hinzufügen
+          </button>
+        </div>
         {/* kein "accept"-Filter: iOS erkennt .m4b sonst teils nicht */}
         <input ref={fileInput} type="file" multiple hidden onChange={onFiles} />
       </header>
@@ -127,6 +137,8 @@ export default function Library() {
           )
         })}
       </ul>
+
+      {showSync && <SyncPanel onClose={() => setShowSync(false)} />}
     </div>
   )
 }

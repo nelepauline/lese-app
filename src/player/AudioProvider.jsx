@@ -87,6 +87,7 @@ export function AudioProvider({ children }) {
     a.currentTime = start < (a.duration || Infinity) - 5 ? start : 0
     a.playbackRate = a.defaultPlaybackRate = getSettings().playbackRate
     setTime({ position: a.currentTime, duration: a.duration })
+    lastSave.current = Date.now() // nicht sofort wieder speichern (Position ist unverändert)
 
     const artworkUrl = cover ? await session.blobToDataUrl(cover) : null
     session.setMetadata({ title: b.title, artist: b.author, album: '', artworkUrl, artworkType: cover?.type })

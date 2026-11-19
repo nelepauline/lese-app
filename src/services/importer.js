@@ -3,6 +3,7 @@
 import { addBook, listBooks, newId, requestPersistentStorage } from '../db/db.js'
 import { isZip, readEpubInfo } from '../formats/epub/epubInfo.js'
 import { isMp4, readAudiobookInfo } from '../formats/m4b/mp4.js'
+import { fingerprint } from './sync/fingerprint.js'
 
 // Verkleinert das Cover, damit die Bibliothek schnell lädt.
 async function makeThumbnail(blob, maxHeight = 600) {
@@ -46,6 +47,7 @@ export async function importFile(file) {
     ...meta,
     fileName: file.name,
     size: file.size,
+    syncKey: await fingerprint(file), // erkennt das Buch auf anderen Geräten wieder
     source: 'local',
     fileStored: true,
     addedAt: Date.now(),

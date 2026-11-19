@@ -74,7 +74,25 @@ Vite automatisch (Build-Befehl `npm run build`, Ausgabeordner `dist`).
 3. Ab jetzt startet die App wie eine normale App – auch ohne Internet.
 
 Wichtig: Jedes Gerät hat seine **eigene** Bibliothek. Bücher müssen pro Gerät einmal
-hinzugefügt werden (Fortschritts-Sync kommt in einer späteren Etappe).
+hinzugefügt werden. Lesepositionen und Lesezeichen lassen sich aber abgleichen (siehe 4.).
+
+---
+
+## 4. Geräte abgleichen (über GitHub)
+Auf **jedem** Gerät einmal einrichten:
+1. In der Bibliothek oben auf das **Wolken-Symbol** tippen.
+2. Einen Namen für das Gerät eingeben (z. B. „iPhone“).
+3. **„GitHub öffnen“** → bei *Expiration* „No expiration“ wählen → ganz unten **Generate token**
+   → den Schlüssel (beginnt mit `ghp_`) kopieren.
+4. Zurück in die App, Schlüssel einfügen, **Verbinden**.
+
+Danach werden Positionen und Lesezeichen automatisch abgeglichen. Öffnest du ein Buch, das auf
+einem anderen Gerät an einer anderen Stelle ist, fragt die App, ob du dorthin springen möchtest.
+
+- Gespeichert wird in einem privaten Gist in deinem GitHub-Konto
+  („Lesezeit – Synchronisation“, bitte nicht löschen). Die Bücher selbst werden **nicht** hochgeladen.
+- Dasselbe Buch wird auf allen Geräten an der Datei erkannt – also überall dieselbe Datei verwenden.
+- Schlüssel verloren oder abgelaufen? Einfach einen neuen erstellen und neu verbinden.
 
 ---
 
@@ -87,7 +105,8 @@ src/
   db/db.js                Lokaler Speicher (IndexedDB): Bücher, Cover, Fortschritt, Lesezeichen
   services/
     importer.js           Dateien importieren (später auch: OneDrive)
-    progress.js           Fortschritt speichern (später: Sync zu Supabase/Hardcover)
+    progress.js           Fortschritt speichern (meldet Änderungen an den Abgleich)
+    sync/                 Abgleich zwischen Geräten über einen GitHub-Gist
   formats/
     epub/epubInfo.js      Titel/Autor/Cover aus EPUBs lesen
     m4b/mp4.js            Kapitel/Titel/Cover aus M4B-Dateien lesen
@@ -105,5 +124,7 @@ public/icons/             App-Icons (neu erzeugen mit `npm run icons`)
   enthält (`hasMediaOverlay`). foliate-js bringt die Abspiel-Logik bereits mit.
 - **OneDrive:** Bücher haben ein Feld `source` (`'local'`) und `fileStored` – ein OneDrive-Buch
   kann so in der Bibliothek stehen, bevor es heruntergeladen ist.
-- **Fortschritts-Sync / Hardcover:** Alles läuft über `saveProgress()` in
-  `services/progress.js`. Dort werden später Sync-Ziele mit `registerSyncTarget()` angemeldet.
+- **Hardcover:** Alles läuft über `saveProgress()` in `services/progress.js`. Dort meldet sich
+  schon der Geräte-Abgleich mit `registerSyncTarget()` an; Hardcover kommt genauso dazu.
+- **Abgleich testen ohne echtes GitHub:** Mit `VITE_GITHUB_API=<adresse> npm run dev` spricht die
+  App mit einem Nachbau der GitHub-API statt mit GitHub.

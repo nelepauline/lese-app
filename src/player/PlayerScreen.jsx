@@ -1,11 +1,14 @@
 // Vollbild-Player für Hörbücher
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAudio, useAudioTime, chapterIndexAt, SKIP_SECONDS } from './AudioProvider.jsx'
 import { navigate } from '../lib/router.js'
 import { clock, duration as fmtDuration, percent } from '../lib/format.js'
 import Icon from '../components/Icon.jsx'
 import Sheet from '../components/Sheet.jsx'
 import Cover from '../components/Cover.jsx'
+import SyncOffer from '../components/SyncOffer.jsx'
+import { checkForNewerPosition } from '../services/sync/sync.js'
+import { getProgress } from '../services/progress.js'
 
 const RATES = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.75, 2]
 const SLEEP_OPTIONS = [5, 15, 30, 45, 60, 90]
@@ -17,12 +20,41 @@ export default function PlayerScreen({ id }) {
   const [panel, setPanel] = useState(null) // 'chapters' | 'rate' | 'sleep'
   const [scrub, setScrub] = useState(null)  // Position während des Ziehens
 
+  // Anderes Gerät an anderer Stelle? Den lokalen Stand VOR dem Laden merken,
+  // dann im Hintergrund nachsehen.
+  const [offer, setOffer] = useState(null)
+  const offerRef = useRef(null)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; offerRef.current?.release(); offerRef.current = null }
+  }, [])
+  const checked = useRef(false)
+  useEffect(() => {
+    if (checked.current) return
+    checked.current = true
+    getProgress(id)
+      .then(baseline => checkForNewerPosition(id, baseline ?? null))
+      .then(o => {
+        if (!mounted.current) return o?.release()
+        offerRef.current = o
+        setOffer(o)
+      }).catch(() => {})
+  }, [id])
+
   useEffect(() => {
     audio.load(id).catch(err => setError(err.message || String(err)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const book = audio.book?.id === id ? audio.book : null
+
+  function answerOffer(jump) {
+    if (jump && offerRef.current) audio.seekTo(offerRef.current.remote.position ?? 0)
+    offerRef.current?.release()
+    offerRef.current = null
+    setOffer(null)
+  }
   const chapters = book ? audio.chapters : []
   const pos = scrub ?? position
   const idx = chapterIndexAt(chapters, pos)
@@ -47,6 +79,7 @@ export default function PlayerScreen({ id }) {
       </header>
 
       {error && <p className="notice notice-error">{error}</p>}
+      {offer && <SyncOffer offer={offer} audio onJump={() => answerOffer(true)} onStay={() => answerOffer(false)} />}
 
       {book && (
         <div className="player-body">
