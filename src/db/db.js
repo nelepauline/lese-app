@@ -1,0 +1,123 @@
+// Lokaler Speicher (IndexedDB) – hier liegen Bücher, Cover, Fortschritt und Lesezeichen.
+// Alles bleibt auf dem Gerät und funktioniert offline.
+import { openDB } from 'idb'
+
+const DB_NAME = 'lese-app'
+const DB_VERSION = 1
+
+/*
+  Tabellen ("Stores"):
+  - books:     Metadaten je Buch  { id, type, title, author, ... }
+  - files:     die eigentliche Datei (EPUB/M4B) als Blob, Schlüssel = book.id
+  - covers:    Coverbild als Blob, Schlüssel = book.id
+  - progress:  Lese-/Hörstand, Schlüssel = book.id
+  - bookmarks: Lesezeichen { id, bookId, cfi, label, excerpt, fraction, createdAt }
+
+  Buch-Typen:
+  - 'epub'       normales E-Book
+  - 'audiobook'  M4B-Hörbuch
+  (später: EPUBs mit Media Overlays werden als 'epub' mit hasMediaOverlay=true geführt)
+
+  Herkunft (source):
+  - 'local'      über die Dateiauswahl importiert
+  (später: 'onedrive' – dann kann ein Buch auch ohne gespeicherte Datei existieren,
+   erkennbar an fileStored=false)
+*/
+
+let dbPromise
+function db() {
+  dbPromise ??= openDB(DB_NAME, DB_VERSION, {
+    upgrade(db) {
+      db.createObjectStore('books', { keyPath: 'id' })
+      db.createObjectStore('files')
+      db.createObjectStore('covers')
+      db.createObjectStore('progress')
+      const bm = db.createObjectStore('bookmarks', { keyPath: 'id' })
+      bm.createIndex('bookId', 'bookId')
+    },
+  })
+  return dbPromise
+}
+
+export const newId = () =>
+  (crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2))
+
+// ---- Bücher ----
+export async function listBooks() {
+  return (await db()).getAll('books')
+}
+export async function getBook(id) {
+  return (await db()).get('books', id)
+}
+export async function putBook(book) {
+  return (await db()).put('books', book)
+}
+export async function updateBook(id, changes) {
+  const d = await db()
+  const book = await d.get('books', id)
+  if (book) await d.put('books', { ...book, ...changes })
+}
+
+export async function addBook(book, file, cover) {
+  const d = await db()
+  const tx = d.transaction(['books', 'files', 'covers'], 'readwrite')
+  tx.objectStore('books').put(book)
+  if (file) tx.objectStore('files').put(file, book.id)
+  if (cover) tx.objectStore('covers').put(cover, book.id)
+  await tx.done
+}
+
+export async function deleteBook(id) {
+  const d = await db()
+  const bms = await d.getAllKeysFromIndex('bookmarks', 'bookId', id)
+  const tx = d.transaction(['books', 'files', 'covers', 'progress', 'bookmarks'], 'readwrite')
+  tx.objectStore('books').delete(id)
+  tx.objectStore('files').delete(id)
+  tx.objectStore('covers').delete(id)
+  tx.objectStore('progress').delete(id)
+  for (const key of bms) tx.objectStore('bookmarks').delete(key)
+  await tx.done
+}
+
+// ---- Dateien & Cover ----
+export async function getFile(id) {
+  return (await db()).get('files', id)
+}
+export async function getCover(id) {
+  return (await db()).get('covers', id)
+}
+
+// ---- Fortschritt ----
+export async function getProgress(id) {
+  return (await db()).get('progress', id)
+}
+export async function putProgress(id, progress) {
+  return (await db()).put('progress', progress, id)
+}
+export async function getAllProgress() {
+  const d = await db()
+  const keys = await d.getAllKeys('progress')
+  const values = await d.getAll('progress')
+  return Object.fromEntries(keys.map((k, i) => [k, values[i]]))
+}
+
+// ---- Lesezeichen ----
+export async function listBookmarks(bookId) {
+  const list = await (await db()).getAllFromIndex('bookmarks', 'bookId', bookId)
+  return list.sort((a, b) => a.fraction - b.fraction)
+}
+export async function addBookmark(bookmark) {
+  return (await db()).put('bookmarks', bookmark)
+}
+export async function deleteBookmark(id) {
+  return (await db()).delete('bookmarks', id)
+}
+
+// Bittet den Browser, die Daten nicht automatisch zu löschen,
+// wenn der Speicher knapp wird (wichtig für Safari).
+export async function requestPersistentStorage() {
+  try {
+    if (navigator.storage?.persist && !(await navigator.storage.persisted()))
+      await navigator.storage.persist()
+  } catch { /* nicht unterstützt – egal */ }
+}
