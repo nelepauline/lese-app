@@ -20,8 +20,8 @@ const DB_VERSION = 1
 
   Herkunft (source):
   - 'local'      über die Dateiauswahl importiert
-  (später: 'onedrive' – dann kann ein Buch auch ohne gespeicherte Datei existieren,
-   erkennbar an fileStored=false)
+  - 'dropbox'    aus dem verbundenen Cloud-Ordner; remote = { provider, itemId, name, size }.
+                 Ohne Download ist fileStored=false (nur Eintrag, keine Datei).
 */
 
 let dbPromise

@@ -10,7 +10,7 @@ import Icon from '../components/Icon.jsx'
 import SyncPanel from './SyncPanel.jsx'
 import { useSyncState } from '../services/sync/sync.js'
 import CloudPanel from './CloudPanel.jsx'
-import { useCloudState, download, removeDownload, signIn, clearError } from '../services/cloud/cloudLibrary.js'
+import { useCloudState, download, removeDownload, signIn, clearError, PROVIDER_NAME } from '../services/cloud/cloudLibrary.js'
 
 const FILTERS = [
   ['all', 'Alle'],
@@ -74,7 +74,7 @@ export default function Library() {
   }
 
   async function onRemoveDownload(book) {
-    if (!confirm(`Download von „${book.title}“ entfernen? Das Buch bleibt in OneDrive und deine Position bleibt gespeichert.`)) return
+    if (!confirm(`Download von „${book.title}“ entfernen? Das Buch bleibt in ${PROVIDER_NAME} und deine Position bleibt gespeichert.`)) return
     if (audio.book?.id === book.id) audio.close()
     await removeDownload(book)
   }
@@ -95,7 +95,7 @@ export default function Library() {
         <h1>Bibliothek</h1>
         <div className="header-actions">
           <button className={`icon-btn ${cloud.folder ? (cloud.error ? 'sync-warn' : 'sync-on') : ''}`}
-            onClick={() => setShowCloud(true)} aria-label="OneDrive-Ordner" title="OneDrive-Ordner">
+            onClick={() => setShowCloud(true)} aria-label={`${PROVIDER_NAME}-Ordner`} title={`${PROVIDER_NAME}-Ordner`}>
             <Icon name="cloud" />
           </button>
           <button className={`icon-btn ${sync.connected ? (sync.error ? 'sync-warn' : 'sync-on') : ''}`}
@@ -142,7 +142,7 @@ export default function Library() {
           <h2>Noch keine Bücher</h2>
           <p>Tippe auf „Hinzufügen“ und wähle EPUB-Bücher oder M4B-Hörbücher aus.
             Sie werden auf diesem Gerät gespeichert und sind danach offline verfügbar.
-            Oder verbinde über das Wolken-Symbol einen OneDrive-Ordner.</p>
+            Oder verbinde über das Wolken-Symbol einen {PROVIDER_NAME}-Ordner.</p>
         </div>
       )}
 
@@ -158,7 +158,7 @@ export default function Library() {
                 <div className="cover-wrap">
                   <Cover book={book} />
                   {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
-                  {inCloud && dl == null && <span className="badge badge-left" title="In OneDrive – zum Herunterladen tippen"><Icon name="cloud" size={14} /></span>}
+                  {inCloud && dl == null && <span className="badge badge-left" title={`In ${PROVIDER_NAME} – zum Herunterladen tippen`}><Icon name="cloud" size={14} /></span>}
                   {dl != null && (
                     <div className="download-overlay">
                       <div className="download-ring" style={{ '--p': dl }} />
@@ -180,9 +180,9 @@ export default function Library() {
                   <>
                     <div className="progress-bar"><span style={{ width: `${f * 100}%` }} /></div>
                     <span className="book-percent">{p ? percent(f) : 'Neu'}</span>
-                    {book.source === 'onedrive' ? (
+                    {book.remote ? (
                       <button className="icon-btn small" onClick={() => onRemoveDownload(book)}
-                        aria-label="Download entfernen" title="Download entfernen (bleibt in OneDrive)">
+                        aria-label="Download entfernen" title={`Download entfernen (bleibt in ${PROVIDER_NAME})`}>
                         <Icon name="downloadOff" size={16} />
                       </button>
                     ) : (

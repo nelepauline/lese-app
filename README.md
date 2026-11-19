@@ -96,24 +96,24 @@ einem anderen Gerät an einer anderen Stelle ist, fragt die App, ob du dorthin s
 
 ---
 
-## 5. OneDrive-Ordner als Bibliothek
-In der Bibliothek auf das **Wolken-Symbol** tippen → **Mit Microsoft anmelden** → Ordner auswählen.
+## 5. Dropbox-Ordner als Bibliothek
+In der Bibliothek auf das **Wolken-Symbol** tippen → **Mit Dropbox anmelden** → Ordner auswählen.
 Alle EPUBs und M4B-Hörbücher darin (auch in Unterordnern) erscheinen in der Bibliothek, mit
 Wolke und Dateigröße. Ein Tipp auf ein Buch lädt es herunter und öffnet es. Das durchgestrichene
-Download-Symbol entfernt die Kopie vom Gerät; das Buch bleibt in OneDrive, Position und
+Download-Symbol entfernt die Kopie vom Gerät; das Buch bleibt in Dropbox, Position und
 Lesezeichen bleiben erhalten.
 
-- Die App darf in OneDrive nur **lesen** (nie ändern oder löschen).
-- Microsoft lässt Web-Apps ca. **24 Stunden** angemeldet. Danach einmal auf „Neu anmelden“ tippen.
-  Heruntergeladene Bücher funktionieren immer, auch offline.
+- Die App darf in Dropbox nur **lesen** (nie ändern oder löschen).
+- Man bleibt angemeldet. Heruntergeladene Bücher funktionieren immer, auch offline.
 
-**Einmalige Einrichtung (App bei Microsoft registrieren):**
-1. <https://portal.azure.com> mit dem Microsoft-Konto öffnen → „App-Registrierungen“ → „Neue Registrierung“.
-2. Name: `Lesezeit`. Kontotypen: „Konten in einem beliebigen Organisationsverzeichnis und persönliche
-   Microsoft-Konten“.
-3. Umleitungs-URI: Plattform **Single-Page-Anwendung (SPA)**, Adresse
-   `https://nelepauline.github.io/lese-app/` (optional zusätzlich `http://localhost:5173/`).
-4. Die angezeigte **Anwendungs-ID (Client-ID)** in `src/config.js` bei `ONEDRIVE_CLIENT_ID` eintragen.
+**Einmalige Einrichtung (App bei Dropbox anlegen):**
+1. <https://www.dropbox.com/developers/apps> öffnen → **Create app**.
+2. **Scoped access** und **Full Dropbox** wählen, einen Namen vergeben (z. B. `Lesezeit-Bücher`;
+   muss bei Dropbox einmalig sein).
+3. Reiter **Permissions**: Häkchen bei `files.metadata.read` und `files.content.read` → unten **Submit**.
+4. Reiter **Settings** → *Redirect URIs*: `https://nelepauline.github.io/lese-app/` eintragen → **Add**
+   (optional zusätzlich `http://localhost:5173/`).
+5. Den **App key** (nicht das App secret!) in `src/config.js` bei `DROPBOX_APP_KEY` eintragen.
 
 ---
 
@@ -126,7 +126,7 @@ src/
   db/db.js                Lokaler Speicher (IndexedDB): Bücher, Cover, Fortschritt, Lesezeichen
   services/
     importer.js           Dateien importieren und auswerten
-    cloud/                OneDrive: Anmeldung, Ordner lesen, Herunterladen
+    cloud/                Dropbox: Anmeldung, Ordner lesen, Herunterladen
     progress.js           Fortschritt speichern (meldet Änderungen an den Abgleich)
     sync/                 Abgleich zwischen Geräten über einen GitHub-Gist
   formats/

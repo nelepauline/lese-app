@@ -1,5 +1,5 @@
 // Importiert Dateien aus der Dateiauswahl in die lokale Bibliothek.
-// Später kommt hier z. B. ein OneDrive-Import (Etappe 2) als weitere Quelle dazu.
+// Cloud-Bücher (services/cloud) nutzen analyzeFile() nach dem Herunterladen.
 import { addBook, listBooks, newId, requestPersistentStorage } from '../db/db.js'
 import { isZip, readEpubInfo } from '../formats/epub/epubInfo.js'
 import { isMp4, readAudiobookInfo } from '../formats/m4b/mp4.js'

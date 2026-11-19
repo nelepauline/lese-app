@@ -1,12 +1,12 @@
-// OneDrive-Ordner verbinden: anmelden, Ordner auswählen, aktualisieren.
+// Cloud-Ordner (Dropbox) verbinden: anmelden, Ordner auswählen, aktualisieren.
 import { useEffect, useState } from 'react'
 import Sheet from '../components/Sheet.jsx'
 import Icon from '../components/Icon.jsx'
 import { timeAgo } from '../lib/format.js'
 import {
-  useCloudState, signIn, signOut, listFolder, chooseFolder, forgetFolder, refreshLibrary, clearError,
+  useCloudState, signIn, signOut, listFolder, chooseFolder, forgetFolder, refreshLibrary, clearError, PROVIDER_NAME,
 } from '../services/cloud/cloudLibrary.js'
-import { BOOK_EXT } from '../services/cloud/onedrive.js'
+import { BOOK_EXT, ROOT } from '../services/cloud/dropbox.js'
 
 export default function CloudPanel({ onClose }) {
   const c = useCloudState()
@@ -18,19 +18,19 @@ export default function CloudPanel({ onClose }) {
   if (!c.configured) {
     body = (
       <div className="settings sync-panel">
-        <p>Die Verbindung zu OneDrive ist vorbereitet, aber noch nicht bei Microsoft angemeldet.
-          Sobald die App dort registriert ist, kannst du hier deinen Bücher-Ordner verbinden.</p>
+        <p>Die Verbindung zu {PROVIDER_NAME} ist vorbereitet, aber die App ist dort noch nicht angemeldet.
+          Sobald der App-Schlüssel eingetragen ist, kannst du hier deinen Bücher-Ordner verbinden.</p>
       </div>
     )
   } else if (!c.signedIn) {
     body = (
       <div className="settings sync-panel">
         {c.folder
-          ? <p>Die Anmeldung bei OneDrive ist abgelaufen (Microsoft erlaubt nur ca. 24 Stunden).
-              Heruntergeladene Bücher kannst du weiter lesen. Für neue Downloads bitte kurz neu anmelden.</p>
-          : <p>Verbinde einen OneDrive-Ordner: Alle EPUBs und Hörbücher darin erscheinen in deiner
+          ? <p>Die Anmeldung bei {PROVIDER_NAME} ist nicht mehr gültig. Heruntergeladene Bücher kannst du
+              weiter lesen. Für neue Downloads bitte neu anmelden.</p>
+          : <p>Verbinde einen {PROVIDER_NAME}-Ordner: Alle EPUBs und Hörbücher darin erscheinen in deiner
               Bibliothek. Herunterladen musst du nur die Bücher, die du gerade brauchst.</p>}
-        <button className="btn btn-primary" onClick={() => signIn().catch(() => {})}>Mit Microsoft anmelden</button>
+        <button className="btn btn-primary" onClick={() => signIn().catch(() => {})}>Mit {PROVIDER_NAME} anmelden</button>
         <p className="muted small">Die App darf deine Dateien nur lesen, nie ändern oder löschen.</p>
         {c.error && <p className="notice notice-error">{c.error}</p>}
       </div>
@@ -63,11 +63,11 @@ export default function CloudPanel({ onClose }) {
     )
   }
 
-  return <Sheet title="OneDrive-Ordner" onClose={onClose}>{body}</Sheet>
+  return <Sheet title={`${PROVIDER_NAME}-Ordner`} onClose={onClose}>{body}</Sheet>
 }
 
 function FolderBrowser({ onChoose, onCancel, error }) {
-  const [stack, setStack] = useState([{ id: 'root', name: 'OneDrive' }])
+  const [stack, setStack] = useState([ROOT])
   const [items, setItems] = useState(null)
   const [loadError, setLoadError] = useState(null)
   const current = stack[stack.length - 1]
@@ -82,7 +82,7 @@ function FolderBrowser({ onChoose, onCancel, error }) {
   }, [current.id])
 
   const folders = (items ?? []).filter(i => i.folder).sort((a, b) => a.name.localeCompare(b.name, 'de'))
-  const bookCount = (items ?? []).filter(i => i.file && BOOK_EXT.test(i.name)).length
+  const bookCount = (items ?? []).filter(i => !i.folder && BOOK_EXT.test(i.name)).length
   const path = stack.slice(1).map(s => s.name).join(' / ')
 
   return (
@@ -91,7 +91,7 @@ function FolderBrowser({ onChoose, onCancel, error }) {
         {stack.length > 1 && (
           <button className="icon-btn small" onClick={() => setStack(s => s.slice(0, -1))} aria-label="Zurück"><Icon name="back" size={18} /></button>
         )}
-        <span>{path || 'OneDrive'}</span>
+        <span>{path || ROOT.name}</span>
       </div>
 
       {!items && !loadError && <p className="muted pad">Lade …</p>}
@@ -104,7 +104,7 @@ function FolderBrowser({ onChoose, onCancel, error }) {
               <li key={f.id}>
                 <button onClick={() => setStack(s => [...s, { id: f.id, name: f.name }])}>
                   <Icon name="folder" size={20} /> <span>{f.name}</span>
-                  <span className="muted small">{f.folder.childCount ?? ''}</span>
+                  <span className="muted">›</span>
                 </button>
               </li>
             ))}
@@ -118,7 +118,7 @@ function FolderBrowser({ onChoose, onCancel, error }) {
             <div className="sync-buttons">
               {onCancel && <button className="btn" onClick={onCancel}>Abbrechen</button>}
               <button className="btn btn-primary" disabled={stack.length === 1 && !bookCount && !folders.length}
-                onClick={() => onChoose({ id: current.id, name: current.name, path: path || 'OneDrive' })}>
+                onClick={() => onChoose({ id: current.id, name: current.name, path: path || ROOT.name })}>
                 Diesen Ordner verwenden
               </button>
             </div>

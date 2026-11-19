@@ -1,14 +1,16 @@
-// OneDrive-Ordner als Bibliothek (Etappe 2).
+// Cloud-Ordner (Dropbox) als Bibliothek (Etappe 2).
 // Alle EPUB/M4B-Dateien im gewählten Ordner erscheinen in der Bibliothek –
 // zunächst nur als Eintrag (fileStored: false). Ein Tipp lädt das Buch aufs
 // Gerät; "Download entfernen" löscht nur die lokale Kopie.
 import { useSyncExternalStore } from 'react'
 import { listBooks, putBook, deleteBook, storeDownload, removeDownload as dbRemoveDownload, newId, requestPersistentStorage } from '../../db/db.js'
 import { analyzeFile } from '../importer.js'
-import * as od from './onedrive.js'
+import * as od from './dropbox.js'
 
-const FOLDER_KEY = 'lese-app:onedrive-folder'   // { id, name, path }
-const ACCOUNT_KEY = 'lese-app:onedrive-account'  // Anzeigename
+export const PROVIDER_NAME = od.PROVIDER_NAME
+
+const FOLDER_KEY = 'lese-app:cloud-folder'   // { id, name, path }
+const ACCOUNT_KEY = 'lese-app:cloud-account'  // Anzeigename
 
 const load = key => { try { return JSON.parse(localStorage.getItem(key)) } catch { return null } }
 const save = (key, v) => { try { v == null ? localStorage.removeItem(key) : localStorage.setItem(key, JSON.stringify(v)) } catch { /* egal */ } }
@@ -49,7 +51,7 @@ export async function signOut() {
   setState({ signedIn: false, account: null, error: null })
 }
 
-// Beim Start: Rückkehr von der Microsoft-Anmeldeseite verarbeiten
+// Beim Start: Rückkehr von der Anmeldeseite verarbeiten
 export async function initCloud() {
   try {
     if (await od.handleRedirect()) {
@@ -76,7 +78,7 @@ export async function forgetFolder() {
   save(FOLDER_KEY, null)
   // nicht heruntergeladene Cloud-Einträge entfernen, heruntergeladene behalten
   for (const b of await listBooks()) {
-    if (b.source !== 'onedrive') continue
+    if (b.source !== od.PROVIDER) continue
     if (b.fileStored) await putBook({ ...b, source: 'local' })
     else await deleteBook(b.id)
   }
@@ -103,12 +105,12 @@ async function doRefresh() {
     const seen = new Set()
     for (const f of files) {
       seen.add(f.id)
-      const remote = { provider: 'onedrive', itemId: f.id, name: f.name, size: f.size, modified: f.lastModifiedDateTime }
+      const remote = { provider: od.PROVIDER, itemId: f.id, name: f.name, size: f.size, modified: f.modified }
       const known = books.find(b => b.remote?.itemId === f.id)
         ?? books.find(b => !b.remote && b.fileName === f.name && b.size === f.size) // schon lokal importiert
       if (known) {
-        if (known.remote?.size !== f.size || known.remote?.name !== f.name || known.source !== 'onedrive')
-          await putBook({ ...known, source: 'onedrive', remote })
+        if (known.remote?.size !== f.size || known.remote?.name !== f.name || known.source !== od.PROVIDER)
+          await putBook({ ...known, source: od.PROVIDER, remote })
         continue
       }
       await putBook({
@@ -118,7 +120,7 @@ async function doRefresh() {
         author: '',
         fileName: f.name,
         size: f.size,
-        source: 'onedrive',
+        source: od.PROVIDER,
         fileStored: false,
         remote,
         addedAt: Date.now(),
@@ -128,7 +130,7 @@ async function doRefresh() {
     // Aus dem Ordner verschwunden: Einträge ohne Download entfernen,
     // heruntergeladene Bücher bleiben als lokale Bücher erhalten.
     for (const b of books) {
-      if (b.source !== 'onedrive' || seen.has(b.remote?.itemId)) continue
+      if (b.source !== od.PROVIDER || seen.has(b.remote?.itemId)) continue
       if (b.fileStored) await putBook({ ...b, source: 'local', remote: undefined })
       else await deleteBook(b.id)
     }

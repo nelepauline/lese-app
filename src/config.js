@@ -1,9 +1,9 @@
 // Einstellungen, die einmal festgelegt werden.
 
-// Client-ID der App-Registrierung bei Microsoft (für den OneDrive-Ordner).
-// Sie ist nicht geheim – sie sagt Microsoft nur, welche App sich anmeldet.
-export const ONEDRIVE_CLIENT_ID = import.meta.env.VITE_ONEDRIVE_CLIENT_ID || ''
+// App-Schlüssel ("App key") der Lesezeit-App in der Dropbox App Console.
+// Er ist nicht geheim – er sagt Dropbox nur, welche App sich anmeldet.
+export const DROPBOX_APP_KEY = import.meta.env.VITE_DROPBOX_APP_KEY || ''
 
 // Nur zum Testen mit einem Nachbau austauschbar
-export const MS_LOGIN = import.meta.env.VITE_MS_LOGIN || 'https://login.microsoftonline.com/common/oauth2/v2.0'
-export const GRAPH_API = import.meta.env.VITE_GRAPH_API || 'https://graph.microsoft.com/v1.0'
+export const DROPBOX_AUTH = import.meta.env.VITE_DROPBOX_AUTH || 'https://www.dropbox.com/oauth2'
+export const DROPBOX_API = import.meta.env.VITE_DROPBOX_API || 'https://api.dropboxapi.com'
