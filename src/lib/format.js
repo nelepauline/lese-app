@@ -35,3 +35,12 @@ export function timeAgo(ts) {
   if (d < 14) return `vor ${d} Tagen`
   return new Date(ts).toLocaleDateString('de-DE')
 }
+
+// 850000 → "830 KB", 12_500_000 → "12 MB", 1_300_000_000 → "1,2 GB"
+export function fileSize(bytes) {
+  if (!bytes) return ''
+  const kb = bytes / 1024, mb = kb / 1024, gb = mb / 1024
+  if (gb >= 1) return `${gb.toLocaleString('de-DE', { maximumFractionDigits: 1 })} GB`
+  if (mb >= 1) return `${Math.round(mb)} MB`
+  return `${Math.max(1, Math.round(kb))} KB`
+}

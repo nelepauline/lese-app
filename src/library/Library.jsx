@@ -3,12 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { listBooks, getAllProgress, deleteBook } from '../db/db.js'
 import { importFile } from '../services/importer.js'
 import { navigate } from '../lib/router.js'
-import { percent } from '../lib/format.js'
+import { percent, fileSize } from '../lib/format.js'
 import { useAudio } from '../player/AudioProvider.jsx'
 import Cover from '../components/Cover.jsx'
 import Icon from '../components/Icon.jsx'
 import SyncPanel from './SyncPanel.jsx'
 import { useSyncState } from '../services/sync/sync.js'
+import CloudPanel from './CloudPanel.jsx'
+import { useCloudState, download, removeDownload, signIn, clearError } from '../services/cloud/cloudLibrary.js'
 
 const FILTERS = [
   ['all', 'Alle'],
@@ -26,15 +28,21 @@ export default function Library() {
   const audio = useAudio()
   const sync = useSyncState()
   const [showSync, setShowSync] = useState(false)
+  const cloud = useCloudState()
+  const [showCloud, setShowCloud] = useState(false)
 
   const refresh = useCallback(async () => {
     const [list, prog] = await Promise.all([listBooks(), getAllProgress()])
-    list.sort((a, b) => (b.lastOpenedAt || b.addedAt) - (a.lastOpenedAt || a.addedAt))
+    // Zuletzt geöffnete zuerst; nie geöffnete Cloud-Bücher alphabetisch dahinter
+    const rank = b => b.lastOpenedAt || (b.fileStored === false ? 0 : b.addedAt)
+    list.sort((a, b) => (rank(b) - rank(a)) || a.title.localeCompare(b.title, 'de'))
     setBooks(list)
     setProgress(prog)
   }, [])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => { refresh() }, [refresh, cloud.version])
+  // Gerade bei Microsoft angemeldet, aber noch kein Ordner → Auswahl öffnen
+  useEffect(() => { if (cloud.justSignedIn && !cloud.folder) setShowCloud(true) }, [cloud.justSignedIn, cloud.folder])
   useEffect(() => { sessionStorage.setItem('lib-filter', filter) }, [filter])
 
   async function onFiles(e) {
@@ -65,7 +73,17 @@ export default function Library() {
     refresh()
   }
 
-  function open(book) {
+  async function onRemoveDownload(book) {
+    if (!confirm(`Download von „${book.title}“ entfernen? Das Buch bleibt in OneDrive und deine Position bleibt gespeichert.`)) return
+    if (audio.book?.id === book.id) audio.close()
+    await removeDownload(book)
+  }
+
+  async function open(book) {
+    if (book.fileStored === false) {
+      try { await download(book) } catch { return }
+      book = { ...book, fileStored: true }
+    }
     navigate(book.type === 'audiobook' ? `/listen/${book.id}` : `/read/${book.id}`)
   }
 
@@ -76,12 +94,17 @@ export default function Library() {
       <header className="library-header">
         <h1>Bibliothek</h1>
         <div className="header-actions">
-          <button className={`icon-btn ${sync.connected ? (sync.error ? 'sync-warn' : 'sync-on') : ''}`}
-            onClick={() => setShowSync(true)} aria-label="Geräte abgleichen" title="Geräte abgleichen">
+          <button className={`icon-btn ${cloud.folder ? (cloud.error ? 'sync-warn' : 'sync-on') : ''}`}
+            onClick={() => setShowCloud(true)} aria-label="OneDrive-Ordner" title="OneDrive-Ordner">
             <Icon name="cloud" />
           </button>
-          <button className="btn btn-primary" onClick={() => fileInput.current.click()} disabled={!!busy}>
-            <Icon name="plus" size={18} /> Hinzufügen
+          <button className={`icon-btn ${sync.connected ? (sync.error ? 'sync-warn' : 'sync-on') : ''}`}
+            onClick={() => setShowSync(true)} aria-label="Geräte abgleichen" title="Geräte abgleichen">
+            <Icon name="sync" />
+          </button>
+          <button className="btn btn-primary btn-add" onClick={() => fileInput.current.click()} disabled={!!busy}
+            aria-label="Hinzufügen">
+            <Icon name="plus" size={18} /> <span>Hinzufügen</span>
           </button>
         </div>
         {/* kein "accept"-Filter: iOS erkennt .m4b sonst teils nicht */}
@@ -103,12 +126,23 @@ export default function Library() {
         </div>
       )}
 
+      {cloud.error && !showCloud && (
+        <div className="notice notice-error" onClick={clearError}>
+          {cloud.error}
+          {!cloud.signedIn && cloud.configured && (
+            <button className="btn btn-primary notice-action" onClick={e => { e.stopPropagation(); signIn() }}>Neu anmelden</button>
+          )}
+          <span className="notice-close">Tippen zum Schließen</span>
+        </div>
+      )}
+
       {books && books.length === 0 && !busy && (
         <div className="empty">
           <Icon name="book" size={44} />
           <h2>Noch keine Bücher</h2>
           <p>Tippe auf „Hinzufügen“ und wähle EPUB-Bücher oder M4B-Hörbücher aus.
-            Sie werden auf diesem Gerät gespeichert und sind danach offline verfügbar.</p>
+            Sie werden auf diesem Gerät gespeichert und sind danach offline verfügbar.
+            Oder verbinde über das Wolken-Symbol einen OneDrive-Ordner.</p>
         </div>
       )}
 
@@ -116,22 +150,48 @@ export default function Library() {
         {visible.map(book => {
           const p = progress[book.id]
           const f = p?.fraction ?? 0
+          const inCloud = book.fileStored === false
+          const dl = cloud.downloads[book.id]
           return (
-            <li key={book.id} className="book-card">
-              <button className="book-open" onClick={() => open(book)}>
+            <li key={book.id} className={`book-card ${inCloud ? 'in-cloud' : ''}`}>
+              <button className="book-open" onClick={() => open(book)} disabled={dl != null}>
                 <div className="cover-wrap">
                   <Cover book={book} />
                   {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
+                  {inCloud && dl == null && <span className="badge badge-left" title="In OneDrive – zum Herunterladen tippen"><Icon name="cloud" size={14} /></span>}
+                  {dl != null && (
+                    <div className="download-overlay">
+                      <div className="download-ring" style={{ '--p': dl }} />
+                      <span>{Math.round(dl * 100)} %</span>
+                    </div>
+                  )}
                 </div>
                 <div className="book-title">{book.title}</div>
                 {book.author && <div className="book-author">{book.author}</div>}
               </button>
               <div className="book-meta">
-                <div className="progress-bar"><span style={{ width: `${f * 100}%` }} /></div>
-                <span className="book-percent">{p ? percent(f) : 'Neu'}</span>
-                <button className="icon-btn small" onClick={() => onDelete(book)} aria-label="Löschen" title="Löschen">
-                  <Icon name="trash" size={16} />
-                </button>
+                {inCloud ? (
+                  <>
+                    <span className="book-percent cloud-size">{p ? `${percent(f)} · ` : ''}{fileSize(book.size)}</span>
+                    <button className="icon-btn small" onClick={() => open(book)} disabled={dl != null}
+                      aria-label="Herunterladen" title="Herunterladen"><Icon name="download" size={16} /></button>
+                  </>
+                ) : (
+                  <>
+                    <div className="progress-bar"><span style={{ width: `${f * 100}%` }} /></div>
+                    <span className="book-percent">{p ? percent(f) : 'Neu'}</span>
+                    {book.source === 'onedrive' ? (
+                      <button className="icon-btn small" onClick={() => onRemoveDownload(book)}
+                        aria-label="Download entfernen" title="Download entfernen (bleibt in OneDrive)">
+                        <Icon name="downloadOff" size={16} />
+                      </button>
+                    ) : (
+                      <button className="icon-btn small" onClick={() => onDelete(book)} aria-label="Löschen" title="Löschen">
+                        <Icon name="trash" size={16} />
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </li>
           )
@@ -139,6 +199,7 @@ export default function Library() {
       </ul>
 
       {showSync && <SyncPanel onClose={() => setShowSync(false)} />}
+      {showCloud && <CloudPanel onClose={() => setShowCloud(false)} />}
     </div>
   )
 }

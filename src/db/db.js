@@ -79,6 +79,26 @@ export async function deleteBook(id) {
   await tx.done
 }
 
+// Heruntergeladenes Cloud-Buch speichern: Datei + Cover + aktualisierte Angaben
+export async function storeDownload(book, file, cover) {
+  const d = await db()
+  const tx = d.transaction(['books', 'files', 'covers'], 'readwrite')
+  tx.objectStore('books').put(book)
+  tx.objectStore('files').put(file, book.id)
+  if (cover) tx.objectStore('covers').put(cover, book.id)
+  await tx.done
+}
+
+// Download entfernen: Datei weg, Buch (mit Cover, Fortschritt, Lesezeichen) bleibt
+export async function removeDownload(id) {
+  const d = await db()
+  const tx = d.transaction(['books', 'files'], 'readwrite')
+  const book = await tx.objectStore('books').get(id)
+  tx.objectStore('files').delete(id)
+  if (book) tx.objectStore('books').put({ ...book, fileStored: false })
+  await tx.done
+}
+
 // ---- Dateien & Cover ----
 export async function getFile(id) {
   return (await db()).get('files', id)

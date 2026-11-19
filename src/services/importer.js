@@ -28,6 +28,22 @@ export async function detectType(file) {
   return null
 }
 
+// Liest Typ, Titel, Autor, Kapitel und Cover aus einer Datei.
+export async function analyzeFile(file) {
+  const type = await detectType(file)
+  if (!type) throw new Error(`„${file.name}“ ist weder EPUB noch M4B.`)
+  const info = type === 'epub' ? await readEpubInfo(file) : await readAudiobookInfo(file)
+  const { cover, ...meta } = info
+  // Als Blob mit passendem Typ speichern (wichtig für die Wiedergabe in Safari)
+  const mime = type === 'epub' ? 'application/epub+zip' : 'audio/mp4'
+  return {
+    type, meta,
+    blob: new Blob([file], { type: mime }),
+    cover: await makeThumbnail(cover),
+    syncKey: await fingerprint(file), // erkennt das Buch auf anderen Geräten wieder
+  }
+}
+
 /**
  * Importiert eine Datei. Gibt das neue Buch zurück oder wirft einen Fehler.
  */
@@ -36,27 +52,20 @@ export async function importFile(file) {
   const dup = existing.find(b => b.fileName === file.name && b.size === file.size)
   if (dup) return { book: dup, duplicate: true }
 
-  const type = await detectType(file)
-  if (!type) throw new Error(`„${file.name}“ ist weder EPUB noch M4B.`)
-
-  const info = type === 'epub' ? await readEpubInfo(file) : await readAudiobookInfo(file)
-  const { cover, ...meta } = info
+  const { type, meta, blob, cover, syncKey } = await analyzeFile(file)
   const book = {
     id: newId(),
     type,
     ...meta,
     fileName: file.name,
     size: file.size,
-    syncKey: await fingerprint(file), // erkennt das Buch auf anderen Geräten wieder
+    syncKey,
     source: 'local',
     fileStored: true,
     addedAt: Date.now(),
     lastOpenedAt: 0,
   }
-  // Als Blob mit passendem Typ speichern (wichtig für die Wiedergabe in Safari)
-  const mime = type === 'epub' ? 'application/epub+zip' : 'audio/mp4'
-  const blob = new Blob([file], { type: mime })
-  await addBook(book, blob, await makeThumbnail(cover))
+  await addBook(book, blob, cover)
   requestPersistentStorage()
   return { book, duplicate: false }
 }
