@@ -179,18 +179,32 @@ export async function searchBooks(q, perPage = 8) {
 export async function readingState(userId, bookId) {
   const data = await gql(`query State($u: Int!, $b: Int!) {
     user_books(where: {user_id: {_eq: $u}, book_id: {_eq: $b}}) {
-      id status_id
+      id status_id edition_id
+      edition { id pages audio_seconds }
+      book {
+        pages audio_seconds
+        default_ebook_edition { id pages }
+        default_physical_edition { id pages }
+        default_audio_edition { id audio_seconds }
+      }
       user_book_reads(where: {finished_at: {_is_null: true}}, order_by: {id: desc}, limit: 1) {
-        id progress_pages progress_seconds edition { pages audio_seconds }
+        id progress_pages progress_seconds edition { id pages audio_seconds }
       }
     }
   }`, { u: userId, b: bookId })
   const ub = data.user_books?.[0]
   if (!ub) return null
   const read = ub.user_book_reads?.[0] ?? null
+  const ed = e => e && { id: e.id, pages: e.pages ?? null, seconds: e.audio_seconds ?? null }
   return {
     userBookId: ub.id, statusId: ub.status_id,
-    read: read && { id: read.id, pages: read.progress_pages, seconds: read.progress_seconds, editionPages: read.edition?.pages ?? null, editionSeconds: read.edition?.audio_seconds ?? null },
+    userEdition: ed(ub.edition),
+    defaults: {
+      ebook: ed(ub.book?.default_ebook_edition), physical: ed(ub.book?.default_physical_edition),
+      audio: ed(ub.book?.default_audio_edition),
+      pages: ub.book?.pages ?? null, seconds: ub.book?.audio_seconds ?? null,
+    },
+    read: read && { id: read.id, pages: read.progress_pages, seconds: read.progress_seconds, edition: ed(read.edition) },
   }
 }
 

@@ -118,52 +118,86 @@ async function cachedState(userId, hcBookId, fresh) {
   return value
 }
 
-export async function pushProgress(bookId) {
+// Welche Ausgabe (Edition) zählt? Die der Lese-Runde, sonst die im Regal
+// gewählte, sonst die Standard-Ausgabe passend zum Format.
+function pickEdition(st, audio, link) {
+  if (audio) {
+    const e = [st.read.edition, st.userEdition, st.defaults.audio].find(x => x?.seconds)
+    return { edition: e ?? null, total: e?.seconds ?? st.defaults.seconds ?? link.audioSeconds ?? null }
+  }
+  const e = [st.read.edition, st.userEdition, st.defaults.ebook, st.defaults.physical].find(x => x?.pages)
+  return { edition: e ?? null, total: e?.pages ?? st.defaults.pages ?? link.pages ?? null }
+}
+
+const report = (book, text, extra = {}) => setState({ lastSent: { title: book.title, text, at: Date.now(), ...extra } })
+
+// force: Minuten-Regel und "schon gesendet" ignorieren (Knopf "jetzt senden")
+export async function pushProgress(bookId, { force = false } = {}) {
   if (!hardcoverReady()) return
   const book = await getBook(bookId)
   const link = linkOf(book)
-  if (!link) return
+  if (!link) { if (force) report(book ?? { title: '?' }, 'nicht gesendet – Buch ist nicht mit Hardcover verknüpft', { skipped: true }); return }
   const progress = await getProgress(bookId)
-  if (!progress) return
+  if (!progress) { if (force) report(book, 'nicht gesendet – noch kein Fortschritt gespeichert', { skipped: true }); return }
   lastPush.set(bookId, Date.now())
   backfillJournal(bookId).catch(fail)
   const user = await ensureUser()
-  let st = await cachedState(user.id, link.bookId)
+  let st = await cachedState(user.id, link.bookId, force)
   if (!st || st.statusId !== 2 || !st.read) st = await cachedState(user.id, link.bookId, true)
-  if (!st || st.statusId !== 2 || !st.read) {
-    setState({ lastSent: { title: book.title, text: 'nicht gesendet – steht auf Hardcover nicht auf „Lese ich“', at: Date.now(), skipped: true } })
-    return
-  }
+  if (!st) return report(book, 'nicht gesendet – das Buch ist nicht in deiner Hardcover-Bibliothek', { skipped: true })
+  if (st.statusId !== 2) return report(book, 'nicht gesendet – steht auf Hardcover nicht auf „Lese ich“', { skipped: true })
+  if (!st.read) return report(book, 'nicht gesendet – Hardcover hat keine laufende Lese-Runde (Status einmal neu auf „Lese ich“ setzen)', { skipped: true })
 
+  const audio = book.type === 'audiobook'
+  const { edition, total } = pickEdition(st, audio, link)
   const frac = Math.min(1, Math.max(0, progress.fraction ?? 0))
-  let object, label
-  if (book.type === 'audiobook') {
-    const total = st.read.editionSeconds || link.audioSeconds
+  const object = {}
+  let label
+  if (audio) {
     const seconds = Math.round(total ? frac * total : (progress.position ?? 0))
-    if (seconds === st.read.seconds) return
-    object = { progress_seconds: seconds }
-    label = `${Math.round(frac * 100)} %`
+    if (!force && seconds === st.read.seconds) return
+    object.progress_seconds = seconds
+    label = `${Math.round(frac * 100)} % gehört`
   } else {
-    const total = st.read.editionPages || link.pages
-    if (!total) {
-      setState({ lastSent: { title: book.title, text: 'nicht gesendet – Hardcover kennt die Seitenzahl nicht', at: Date.now(), skipped: true } })
-      return
-    }
+    if (!total) return report(book, 'nicht gesendet – Hardcover kennt die Seitenzahl nicht (auf Hardcover eine Ausgabe wählen)', { skipped: true })
     // Nicht versehentlich "fertig" melden, solange das Ende nicht erreicht ist
     const pages = frac >= 0.995 ? total : Math.min(total - 1, Math.max(1, Math.round(frac * total)))
-    if (pages === st.read.pages) return
-    object = { progress_pages: pages }
+    if (!force && pages === st.read.pages) return
+    object.progress_pages = pages
     label = `Seite ${pages} von ${total}`
   }
-  const sentKey = `${bookId}`
+  // Lese-Runde ohne Ausgabe: passende Ausgabe mitschicken, sonst zählt Hardcover die Seiten nicht
+  if (!st.read.edition && edition?.id) object.edition_id = edition.id
+
   const sent = load(SENT_KEY, {})
   const value = JSON.stringify(object)
-  if (sent[sentKey]?.value === value) return
-  await api.updateRead(st.read.id, object)
-  st.read = { ...st.read, pages: object.progress_pages ?? st.read.pages, seconds: object.progress_seconds ?? st.read.seconds }
-  sent[sentKey] = { value, at: Date.now() }
+  if (!force && sent[bookId]?.value === value) return
+  try {
+    const r = await api.updateRead(st.read.id, object)
+    if (r && object.progress_pages != null && r.progress_pages != null && r.progress_pages !== object.progress_pages)
+      throw new api.HardcoverError('graphql', `Hardcover hat ${r.progress_pages} statt ${object.progress_pages} Seiten gespeichert`)
+  } catch (err) {
+    report(book, `Fehler beim Senden: ${err.message || err}`, { failed: true })
+    throw err
+  }
+  st.read = {
+    ...st.read,
+    pages: object.progress_pages ?? st.read.pages,
+    seconds: object.progress_seconds ?? st.read.seconds,
+    edition: st.read.edition ?? (object.edition_id ? edition : null),
+  }
+  sent[bookId] = { value, at: Date.now() }
   save(SENT_KEY, sent)
-  setState({ lastSent: { title: book.title, text: label, at: Date.now() }, error: null })
+  report(book, label)
+  setState({ error: null })
+}
+
+// Knopf im Einstellungsfenster: zuletzt geöffnetes verknüpftes Buch sofort senden
+export async function pushLatestNow() {
+  const { listBooks } = await import('../../db/db.js')
+  const books = (await listBooks()).filter(b => linkOf(b)).sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0))
+  if (!books.length) { setState({ lastSent: { title: '–', text: 'Noch kein Buch mit Hardcover verknüpft', at: Date.now(), skipped: true } }); return }
+  await pushProgress(books[0].id, { force: true }).catch(fail)
 }
 
 // ---- Lesetagebuch: Zitate und Momente ----

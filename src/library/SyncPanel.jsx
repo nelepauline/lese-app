@@ -3,7 +3,7 @@ import { useState } from 'react'
 import Sheet from '../components/Sheet.jsx'
 import { useSyncState, connect, disconnect, renameDevice, syncNow } from '../services/sync/sync.js'
 import { timeAgo } from '../lib/format.js'
-import { useHardcover, signIn as hcSignIn, signOut as hcSignOut, setOptions as hcSetOptions, clearError as hcClearError } from '../services/hardcover/hardcover.js'
+import { useHardcover, signIn as hcSignIn, signOut as hcSignOut, setOptions as hcSetOptions, clearError as hcClearError, pushLatestNow } from '../services/hardcover/hardcover.js'
 
 const tokenUrl = name =>
   `https://github.com/settings/tokens/new?scopes=gist&description=${encodeURIComponent(`Lesezeit (${name || 'Gerät'})`)}`
@@ -90,6 +90,7 @@ export default function SyncPanel({ onClose }) {
 // ---- Hardcover ----
 function HardcoverSection() {
   const hc = useHardcover()
+  const [sending, setSending] = useState(false)
   return (
     <div className="settings sync-panel hc-section">
       <h3 className="hc-title">Hardcover</h3>
@@ -106,7 +107,7 @@ function HardcoverSection() {
         <>
           <p>✓ Angemeldet{hc.user ? <> als <b>@{hc.user.username}</b></> : ' …'}</p>
           {hc.lastSent && (
-            <p className={`small ${hc.lastSent.skipped ? 'muted' : ''}`}>
+            <p className={`small ${hc.lastSent.failed ? 'sync-error' : hc.lastSent.skipped ? 'muted' : ''}`}>
               Zuletzt: „{hc.lastSent.title}“ – {hc.lastSent.text} · {timeAgo(hc.lastSent.at)}
             </p>
           )}
@@ -118,6 +119,10 @@ function HardcoverSection() {
             Hardcover auf „Lese ich“ stehen. Zitate = Kategorie „Zitate“, Momente = Markierungen mit Reaktion.
             Sichtbar nur für Leute, die dir folgen.</p>
           <div className="sync-buttons">
+            <button className="btn" disabled={sending}
+              onClick={async () => { setSending(true); await pushLatestNow(); setSending(false) }}>
+              {sending ? 'Sende …' : 'Fortschritt jetzt senden'}
+            </button>
             <button className="btn" onClick={() => { if (confirm('Von Hardcover abmelden?')) hcSignOut() }}>Abmelden</button>
           </div>
         </>
