@@ -1,8 +1,9 @@
 // Erzeugt das CSS, das in die Buchseiten eingespielt wird (Schrift, Farben, Abstände).
 import { THEMES, FONTS } from '../settings/settings.js'
 
-export function bookCss(settings) {
-  const t = THEMES[settings.theme] ?? THEMES.light
+// page: Farben der Buchseite (siehe pageTheme in settings.js)
+export function bookCss(settings, page) {
+  const t = page ?? THEMES[settings.theme] ?? THEMES.light
   const font = FONTS[settings.font]?.css
   const align = settings.justify ? 'justify' : 'start'
   const hyph = settings.justify ? 'auto' : 'manual'

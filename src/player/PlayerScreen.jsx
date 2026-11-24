@@ -9,6 +9,11 @@ import Cover from '../components/Cover.jsx'
 import SyncOffer from '../components/SyncOffer.jsx'
 import { checkForNewerPosition } from '../services/sync/sync.js'
 import { getProgress } from '../services/progress.js'
+import CarMode from './CarMode.jsx'
+import NotebookPanel from '../reader/NotebookPanel.jsx'
+import HighlightSheet from '../reader/HighlightSheet.jsx'
+import { useCategories, listHighlights, createHighlight, removeHighlight } from '../services/highlights.js'
+import { useSyncState } from '../services/sync/sync.js'
 
 const RATES = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.75, 2]
 const SLEEP_OPTIONS = [5, 15, 30, 45, 60, 90]
@@ -19,6 +24,13 @@ export default function PlayerScreen({ id }) {
   const [error, setError] = useState(null)
   const [panel, setPanel] = useState(null) // 'chapters' | 'rate' | 'sleep'
   const [scrub, setScrub] = useState(null)  // Position während des Ziehens
+  const [car, setCar] = useState(false)     // Autofahr-Modus
+  const categories = useCategories()
+  const [marks, setMarks] = useState([])    // Hörbuch-Markierungen
+  const [hlSheet, setHlSheet] = useState(null)
+  const sync = useSyncState()
+  const reloadMarks = () => listHighlights(id).then(setMarks)
+  useEffect(() => { reloadMarks() }, [id, sync.dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Anderes Gerät an anderer Stelle? Den lokalen Stand VOR dem Laden merken,
   // dann im Hintergrund nachsehen.
@@ -64,6 +76,26 @@ export default function PlayerScreen({ id }) {
   const chLen = Math.max(1, chEnd - chStart)
   const remainingTotal = (duration - pos) / (audio.rate || 1)
 
+  // Aktuelle Stelle markieren (kurz zurück, damit der Moment nicht schon vorbei ist)
+  async function markHere(openSheet) {
+    if (!book) return false
+    const at = Math.max(0, position - 3)
+    const cat = categories.find(c => c.id === 'other') ?? categories.at(-1)
+    const h = await createHighlight({
+      bookId: id, position: at, fraction: duration ? at / duration : 0,
+      chapter: chapters[chapterIndexAt(chapters, at)]?.title ?? '', text: '', catId: cat?.id,
+    })
+    await reloadMarks()
+    if (openSheet) setHlSheet({ h })
+    return true
+  }
+  async function deleteMark(h) {
+    if (!confirm('Markierung löschen?')) return
+    await removeHighlight(h)
+    setHlSheet(null)
+    reloadMarks()
+  }
+
   const sleepLabel = !audio.sleep ? null
     : audio.sleep.kind === 'chapter' ? 'Kapitelende'
     : clock((audio.sleep.endsAt - Date.now()) / 1000)
@@ -73,9 +105,17 @@ export default function PlayerScreen({ id }) {
       <header className="player-top">
         <button className="icon-btn" onClick={() => navigate('/')} aria-label="Zur Bibliothek"><Icon name="back" /></button>
         <span className="player-top-title">Hörbuch</span>
-        <button className="icon-btn" onClick={() => setPanel('chapters')} aria-label="Kapitel" disabled={!chapters.length}>
-          <Icon name="list" />
-        </button>
+        <div className="player-top-actions">
+          <button className="icon-btn" onClick={() => setCar(true)} aria-label="Autofahr-Modus" title="Autofahr-Modus" disabled={!book}>
+            <Icon name="car" />
+          </button>
+          <button className="icon-btn" onClick={() => setPanel('notebook')} aria-label="Notizbuch: Markierungen und Bilder" title="Notizbuch">
+            <Icon name="notebook" />
+          </button>
+          <button className="icon-btn" onClick={() => setPanel('chapters')} aria-label="Kapitel" disabled={!chapters.length}>
+            <Icon name="list" />
+          </button>
+        </div>
       </header>
 
       {error && <p className="notice notice-error">{error}</p>}
@@ -121,6 +161,7 @@ export default function PlayerScreen({ id }) {
 
           <div className="player-extras">
             <button className="btn" onClick={() => setPanel('rate')}>{audio.rate.toLocaleString('de-DE')}×</button>
+            <button className="btn" onClick={() => markHere(true)}><Icon name="bookmark" size={16} /> Markieren</button>
             <button className={`btn ${audio.sleep ? 'btn-active' : ''}`} onClick={() => setPanel('sleep')}>
               <Icon name="moon" size={16} /> {sleepLabel ?? 'Sleep-Timer'}
             </button>
@@ -143,6 +184,19 @@ export default function PlayerScreen({ id }) {
           </ul>
         </Sheet>
       )}
+
+      {panel === 'notebook' && (
+        <NotebookPanel bookId={id} tabs={['highlights', 'images']} highlights={marks} categories={categories}
+          onSelect={t => { if (typeof t === 'number') audio.seekTo(t); setPanel(null) }}
+          onOpenHighlight={h => { setPanel(null); setHlSheet({ h }) }} onClose={() => setPanel(null)} />
+      )}
+      {hlSheet && (
+        <HighlightSheet key={hlSheet.h.id} highlight={hlSheet.h} categories={categories}
+          onChange={() => reloadMarks()} onDelete={deleteMark}
+          onPlay={h => { audio.seekTo(h.position); if (!audio.playing) audio.play(); setHlSheet(null) }}
+          onClose={() => setHlSheet(null)} />
+      )}
+      {car && <CarMode onMark={() => markHere(false)} onClose={() => setCar(false)} />}
 
       {panel === 'rate' && (
         <Sheet title="Geschwindigkeit" onClose={() => setPanel(null)}>

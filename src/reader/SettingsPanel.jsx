@@ -1,6 +1,6 @@
 // Leseeinstellungen: Theme, Schrift, Größe, Zeilenabstand, Ränder, Blocksatz, Blättern/Scrollen
 import Sheet from '../components/Sheet.jsx'
-import { useSettings, updateSettings, THEMES, FONTS, MARGINS } from '../settings/settings.js'
+import { useSettings, updateSettings, useSystemDark, activeScheme, THEMES, FONTS, MARGINS } from '../settings/settings.js'
 
 function Choice({ options, value, onChange, render }) {
   return (
@@ -18,19 +18,22 @@ export default function SettingsPanel({ onClose }) {
   const s = useSettings()
   const set = changes => updateSettings(changes)
   const clampSize = n => Math.min(200, Math.max(70, n))
+  const scheme = activeScheme(s, useSystemDark())
+  const pageOptions = [['scheme', { label: 'Passend', ...scheme.page }], ...Object.entries(THEMES)]
 
   return (
     <Sheet title="Darstellung" onClose={onClose}>
       <div className="settings">
-        <label>Farbe</label>
+        <label>Seitenfarbe</label>
         <div className="theme-row">
-          {Object.entries(THEMES).map(([key, t]) => (
+          {pageOptions.map(([key, t]) => (
             <button key={key} className={`theme-swatch ${s.theme === key ? 'active' : ''}`}
               style={{ background: t.bg, color: t.fg }} onClick={() => set({ theme: key })}>
               {t.label}
             </button>
           ))}
         </div>
+        {s.theme === 'scheme' && <p className="muted small">Passend zum Farbschema „{scheme.label}“ – änderbar in der Bibliothek unter „Ansicht“.</p>}
 
         <label>Schrift</label>
         <div className="font-grid">

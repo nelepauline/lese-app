@@ -1,5 +1,6 @@
 /* ===== Grundfarben je Theme ===== */
-:root, [data-theme="light"] {
+/* Standardwerte; das gewählte Farbschema überschreibt sie (App.jsx) */
+:root {
   --bg: #fbfaf7;
   --surface: #ffffff;
   --surface-2: #f1eee8;
@@ -13,34 +14,7 @@
   --shelf-front: #b88f62;
   color-scheme: light;
 }
-[data-theme="sepia"] {
-  --bg: #f4ecd8;
-  --surface: #fbf5e6;
-  --surface-2: #ebe1c8;
-  --fg: #4a3a2a;
-  --muted: #86735c;
-  --line: #dccfb2;
-  --accent: #8a4b14;
-  --accent-fg: #fff8ec;
-  --shadow: 0 1px 2px rgba(80, 50, 20, .1), 0 4px 14px rgba(80, 50, 20, .1);
-  --shelf-top: #cfb184;
-  --shelf-front: #a87d4c;
-  color-scheme: light;
-}
-[data-theme="dark"] {
-  --bg: #18181a;
-  --surface: #232326;
-  --surface-2: #2c2c30;
-  --fg: #e4e0d8;
-  --muted: #98948c;
-  --line: #34343a;
-  --accent: #d6a77a;
-  --accent-fg: #1b1408;
-  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .35);
-  --shelf-top: #5a4634;
-  --shelf-front: #3e3024;
-  color-scheme: dark;
-}
+[data-theme="dark"] { --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 14px rgba(0, 0, 0, .35); }
 
 /* ===== Basis ===== */
 *, *::before, *::after { box-sizing: border-box; }
@@ -231,7 +205,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 
 .settings { display: flex; flex-direction: column; gap: 8px; padding: 4px 20px; }
 .settings label { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 10px; }
-.theme-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.theme-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .theme-swatch {
   padding: 14px 0; border-radius: 12px; border: 2px solid var(--line); font-weight: 500;
 }
@@ -255,6 +229,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   position: fixed; inset: 0;
   display: flex; flex-direction: column;
   background: var(--bg);
+  color: var(--fg);
 }
 .reader-bar {
   position: relative; z-index: 5;
@@ -707,3 +682,70 @@ textarea.input { resize: vertical; font: inherit; font-size: 16px; line-height: 
 .goal-options button { padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 14px; }
 .goal-options button.active { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
 .stats-foot { padding: 4px 4px 0; }
+
+/* Statusleisten-Abdeckung (iPhone/iPad als Web-App) */
+.status-cover {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 48;
+  height: env(safe-area-inset-top);
+  background: var(--status-bg, var(--bg));
+  pointer-events: none;
+}
+.library-tools { flex-wrap: nowrap; }
+.library-tools .segmented { flex: 1 1 auto; }
+.tools-right { margin-left: 0; }
+.sort-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.sort-options button { padding: 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); font-size: 14px; }
+.sort-options button.active { border-color: var(--accent); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.scheme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.scheme-grid.inactive { opacity: .7; }
+.scheme-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px; border-radius: 12px; border: 2px solid; font-size: 13px; font-weight: 600; text-align: left; }
+.scheme-card.active { box-shadow: 0 0 0 1px currentColor inset; }
+.scheme-dots { display: flex; gap: 4px; }
+.scheme-dots i { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+.shelf-plant { display: flex; align-items: flex-end; justify-content: center; align-self: end; height: 100%; }
+.plant { width: 78%; max-width: 90px; max-height: 100%; aspect-ratio: 64 / 96; display: block; margin-bottom: -1px; overflow: visible; }
+.size-small .plant { width: 90%; }
+.shelf-plant { position: relative; z-index: 1; }
+
+.player-top-actions { display: flex; align-items: center; }
+.player-extras { flex-wrap: wrap; justify-content: center; }
+
+/* ===== Autofahr-Modus ===== */
+.car-mode {
+  position: fixed; inset: 0; z-index: 90;
+  background: #0d0d0f; color: #f4f1ea;
+  display: flex; flex-direction: column;
+  padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  animation: fade .15s ease-out;
+}
+.car-top { display: flex; align-items: center; gap: 14px; }
+.car-exit { flex-shrink: 0; min-width: 96px; min-height: 56px; border-radius: 16px; border: 0; background: #26262b; color: #f4f1ea; font-size: 20px; font-weight: 600; }
+.car-title { min-width: 0; }
+.car-chapter { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.car-sub { font-size: 17px; color: #a9a59c; margin-top: 2px; }
+.car-main { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4vw; }
+.car-play {
+  width: min(44vw, 44vh, 240px); aspect-ratio: 1; border-radius: 50%; border: 0;
+  background: var(--accent); color: var(--accent-fg); display: grid; place-items: center;
+}
+.car-skip { width: min(24vw, 24vh, 140px); aspect-ratio: 1; border-radius: 50%; border: 0; background: #1d1d22; color: #f4f1ea; display: grid; place-items: center; }
+.car-bottom { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.car-btn {
+  min-height: 92px; border-radius: 20px; border: 0; background: #1d1d22; color: #f4f1ea;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 17px; font-weight: 600;
+}
+.car-btn:disabled { opacity: .35; }
+.car-mark { background: #2a2a31; color: var(--accent); }
+.car-btn:active, .car-skip:active, .car-exit:active { filter: brightness(1.4); }
+.car-play:active { filter: brightness(1.1); transform: scale(.98); }
+.car-toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(130px + env(safe-area-inset-bottom));
+  background: #f4f1ea; color: #0d0d0f; font-size: 19px; font-weight: 600; padding: 12px 20px; border-radius: 999px; white-space: nowrap;
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .car-main { gap: 6vw; }
+  .car-play { width: min(34vh, 200px); }
+  .car-skip { width: min(22vh, 120px); }
+  .car-btn { min-height: 64px; }
+}
+.hl-time { font-family: inherit; font-size: 15px; font-variant-numeric: tabular-nums; }

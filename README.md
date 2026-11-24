@@ -83,8 +83,10 @@ Unter jedem Buch in der Bibliothek auf **„…“** tippen: Dort lassen sich Ti
 Band-Nummer und Cover ändern (die Datei selbst bleibt unverändert). Über **Sortieren → Serie**
 stehen die Bände einer Serie der Reihe nach unter einer Überschrift. Löschen geht ebenfalls dort.
 
-Neben „Sortieren“ öffnet das Symbol rechts die **Ansicht**: Raster, Liste oder Regal
-(Cover auf Regalbrettern) und die Cover-Größe (Klein, Mittel, Groß).
+Das Symbol rechts neben dem Filter öffnet **Ansicht**: Raster, Liste oder Regal (mit kleinen
+Zimmerpflanzen), Cover-Größe, Sortieren und das **Farbschema** (Hell/Dunkel/Automatisch,
+je sechs bzw. fünf Pastell-Schemata). Im Reader gibt es bei „Seitenfarbe“ zusätzlich
+„Passend“ – die Buchseite übernimmt dann das Farbschema.
 
 ## Markieren, Notizbuch und Bilder
 - **Markieren:** Im Buch Text auswählen (lange drücken und ziehen) → unten eine Kategorie
@@ -96,6 +98,13 @@ Neben „Sortieren“ öffnet das Symbol rechts die **Ansicht**: Raster, Liste o
   **Bilder** (z. B. eine Karte) mit Zoom.
 - **Kategorien** lassen sich im Notizbuch anlegen, umbenennen, umfärben und sortieren.
 - Nach einem Sprung (Link, Inhaltsverzeichnis, Suche) erscheint unten links **„Zurück“**.
+
+## Hörbücher: Markieren und Autofahr-Modus
+- **Markieren** im Player merkt sich die aktuelle Stelle (3 Sekunden zurück). Kategorie,
+  Reaktion, Stichwort (z. B. ein Name) und Notiz sind wie bei E-Books möglich; das
+  Notizbuch-Symbol oben zeigt alle Markierungen und Bilder.
+- **Autofahr-Modus** (Auto-Symbol oben): große Knöpfe, dunkel, der Bildschirm bleibt an.
+  „Merken“ speichert die Stelle mit einem Tipp.
 
 ## Übersicht und Streak
 Das Flammen-Symbol in der Bibliothek zeigt den Streak und öffnet die Übersicht: Tagesziel,

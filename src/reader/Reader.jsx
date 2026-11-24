@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBook, getFile, updateBook, listBookmarks, addBookmark, deleteBookmark, newId } from '../db/db.js'
 import { saveProgress, getProgress } from '../services/progress.js'
-import { useSettings, MARGINS, THEMES } from '../settings/settings.js'
+import { useSettings, useSystemDark, activeScheme, pageTheme, schemeVars, schemeFromPage, MARGINS } from '../settings/settings.js'
 import { navigate } from '../lib/router.js'
 import { percent } from '../lib/format.js'
 import { bookCss } from './bookStyles.js'
@@ -25,6 +25,11 @@ export default function Reader({ id }) {
   const settings = useSettings()
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  const systemDark = useSystemDark()
+  const scheme = activeScheme(settings, systemDark)
+  const page = pageTheme(settings, scheme)        // Farben der Buchseite
+  const pageRef = useRef(page)
+  pageRef.current = page
 
   const [meta, setMeta] = useState(null)
   const [error, setError] = useState(null)
@@ -87,7 +92,7 @@ export default function Reader({ id }) {
       // foliate-js braucht einen Dateinamen → Blob in File verpacken
       await view.open(new File([blob], book.fileName || 'book.epub', { type: 'application/epub+zip' }))
       if (!alive) return
-      applySettings(view, settingsRef.current)
+      applySettings(view, settingsRef.current, pageRef.current)
 
       // ---- Markierungen zeichnen ----
       const { Overlayer } = await import('../vendor/foliate-js/overlayer.js')
@@ -185,8 +190,18 @@ export default function Reader({ id }) {
 
   // ---- Einstellungen anwenden, wenn sie sich ändern ----
   useEffect(() => {
-    if (ready && viewRef.current) applySettings(viewRef.current, settings)
-  }, [settings, ready])
+    if (ready && viewRef.current) applySettings(viewRef.current, settings, page)
+  }, [settings, ready, page.bg, page.fg, page.link]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Statusleiste in Seitenfarbe
+  useEffect(() => {
+    document.documentElement.style.setProperty('--status-bg', page.bg)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', page.bg)
+    return () => {
+      document.documentElement.style.removeProperty('--status-bg')
+      document.querySelector('meta[name="theme-color"]')?.setAttribute('content', getComputedStyle(document.documentElement).getPropertyValue('--bg').trim())
+    }
+  }, [page.bg])
 
   // ---- Tippen auf die Seite: links/rechts blättern, Mitte = Leisten ein/aus ----
   const attachPageHandlers = useCallback(doc => {
@@ -418,7 +433,9 @@ export default function Reader({ id }) {
   const closePanel = useCallback(() => setPanel(null), [])
 
   return (
-    <div className={`reader ${chrome ? 'chrome-visible' : 'chrome-hidden'}`}>
+    <div className={`reader ${chrome ? 'chrome-visible' : 'chrome-hidden'}`}
+      data-theme={page.dark ? 'dark' : 'light'}
+      style={settings.theme === 'scheme' ? undefined : schemeVars(schemeFromPage(page, scheme))}>
       <header className="reader-bar reader-top">
         <button className="icon-btn" onClick={() => navigate('/')} aria-label="Zur Bibliothek"><Icon name="back" /></button>
         <div className="reader-title">{meta?.title}</div>
@@ -534,7 +551,7 @@ function scrollEdge(view) {
   return at
 }
 
-function applySettings(view, s) {
+function applySettings(view, s, page) {
   const r = view.renderer
   if (!r) return
   const m = MARGINS[s.margin] ?? MARGINS.medium
@@ -543,9 +560,9 @@ function applySettings(view, s) {
   r.setAttribute('margin', m.margin)
   r.setAttribute('max-inline-size', '720px')
   r.setAttribute('max-column-count', '2')
-  r.setStyles?.(bookCss(s))
+  r.setStyles?.(bookCss(s, page))
   // Pastellfarben: auf hellem Papier "multiplizieren", im Dunkeln etwas zurücknehmen
-  const dark = !!THEMES[s.theme]?.dark
+  const dark = !!page.dark
   view.style.setProperty('--overlayer-highlight-opacity', dark ? '.38' : '.6')
   view.style.setProperty('--overlayer-highlight-blend-mode', dark ? 'normal' : 'multiply')
 }

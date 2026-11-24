@@ -2,13 +2,18 @@
 import { useEffect, useRef, useState } from 'react'
 import Sheet from '../components/Sheet.jsx'
 import { colorOf, REACTIONS, updateHighlight } from '../services/highlights.js'
+import { clock } from '../lib/format.js'
 
-export default function HighlightSheet({ highlight, categories, autoFocusNote, onChange, onDelete, onSearch, onClose }) {
+// Hörbuch-Markierungen haben statt Text eine Position (Sekunden) und ein
+// optionales Stichwort (z. B. ein Name) – dann gibt es "Anhören" statt "Suchen".
+export default function HighlightSheet({ highlight, categories, autoFocusNote, onChange, onDelete, onSearch, onPlay, onClose }) {
   const [h, setH] = useState(highlight)
   const [note, setNote] = useState(highlight.note ?? '')
+  const [label, setLabel] = useState(highlight.text ?? '')
   const noteRef = useRef()
-  const latest = useRef({ h, note })
-  latest.current = { h, note }
+  const latest = useRef({ h, note, label })
+  latest.current = { h, note, label }
+  const isAudio = highlight.position != null
 
   useEffect(() => { if (autoFocusNote) noteRef.current?.focus() }, [autoFocusNote])
 
@@ -20,8 +25,11 @@ export default function HighlightSheet({ highlight, categories, autoFocusNote, o
 
   // Notiz beim Schließen speichern
   async function close() {
-    const { h: cur, note: n } = latest.current
-    if ((cur.note ?? '') !== n.trim()) onChange(await updateHighlight(cur, { note: n.trim() }))
+    const { h: cur, note: n, label: l } = latest.current
+    const changes = {}
+    if ((cur.note ?? '') !== n.trim()) changes.note = n.trim()
+    if (isAudio && (cur.text ?? '') !== l.trim()) changes.text = l.trim()
+    if (Object.keys(changes).length) onChange(await updateHighlight(cur, changes))
     onClose()
   }
 
@@ -30,10 +38,24 @@ export default function HighlightSheet({ highlight, categories, autoFocusNote, o
   return (
     <Sheet title="Markierung" onClose={close}>
       <div className="settings hl-sheet">
-        <blockquote className="hl-quote" style={{ borderColor: colorOf(cat?.color).chip, background: colorOf(cat?.color).mark + '40' }}>
-          {h.text}
-        </blockquote>
-        <p className="muted small">{[h.chapter, h.fraction != null ? `${Math.round(h.fraction * 100)} %` : ''].filter(Boolean).join(' · ')}</p>
+        {isAudio ? (
+          <>
+            <div className="hl-quote hl-time" style={{ borderColor: colorOf(cat?.color).chip, background: colorOf(cat?.color).mark + '40' }}>
+              ⏱ {clock(h.position)}{h.chapter ? ` · ${h.chapter}` : ''}
+            </div>
+            <label htmlFor="hl-label">Stichwort</label>
+            <input id="hl-label" className="input" value={label} placeholder="z. B. ein Name oder Ort (optional)"
+              onChange={e => setLabel(e.target.value)} autoComplete="off"
+              onBlur={() => { if ((h.text ?? '') !== label.trim()) change({ text: label.trim() }) }} />
+          </>
+        ) : (
+          <>
+            <blockquote className="hl-quote" style={{ borderColor: colorOf(cat?.color).chip, background: colorOf(cat?.color).mark + '40' }}>
+              {h.text}
+            </blockquote>
+            <p className="muted small">{[h.chapter, h.fraction != null ? `${Math.round(h.fraction * 100)} %` : ''].filter(Boolean).join(' · ')}</p>
+          </>
+        )}
 
         <label>Kategorie</label>
         <div className="hl-chips wrap">
@@ -60,7 +82,9 @@ export default function HighlightSheet({ highlight, categories, autoFocusNote, o
           onBlur={() => { if ((h.note ?? '') !== note.trim()) change({ note: note.trim() }) }} />
 
         <div className="sync-buttons">
-          <button className="btn" onClick={() => onSearch(h.text)}>Im Buch suchen</button>
+          {isAudio
+            ? <button className="btn" onClick={() => onPlay(h)}>▶ Anhören</button>
+            : <button className="btn" onClick={() => onSearch(h.text)}>Im Buch suchen</button>}
           <button className="btn btn-danger" onClick={() => onDelete(h)}>Löschen</button>
         </div>
       </div>

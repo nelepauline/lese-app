@@ -8,11 +8,16 @@ import CategoryEditor from './CategoryEditor.jsx'
 import ImageViewer from './ImageViewer.jsx'
 import { colorOf, REACTIONS, reactionEmoji, groupKey } from '../services/highlights.js'
 import { listImages, addImage, renameImage, removeImage } from '../services/bookImages.js'
+import { clock } from '../lib/format.js'
 
-const TABS = [['highlights', 'Markierungen'], ['bookmarks', 'Lesezeichen'], ['images', 'Bilder']]
+const ALL_TABS = [['highlights', 'Markierungen'], ['bookmarks', 'Lesezeichen'], ['images', 'Bilder']]
+
+// Text einer Markierung; bei Hörbüchern ohne Stichwort die Zeit
+const labelOf = h => h.text?.trim() || (h.position != null ? `⏱ ${clock(h.position)}` : '')
+const whereOf = h => [h.chapter, h.position != null ? clock(h.position) : h.fraction != null ? `${Math.round(h.fraction * 100)} %` : ''].filter(Boolean).join(' · ')
 
 export default function NotebookPanel({
-  bookId, tab: initialTab = 'highlights', highlights, categories, bookmarks,
+  bookId, tab: initialTab = 'highlights', tabs = ['highlights', 'bookmarks', 'images'], highlights, categories, bookmarks = [],
   onSelect, onOpenHighlight, onDeleteBookmark, onSearch, onClose,
 }) {
   const [tab, setTab] = useState(initialTab)
@@ -23,7 +28,7 @@ export default function NotebookPanel({
       {editCats ? <CategoryEditor categories={categories} highlights={highlights} onDone={() => setEditCats(false)} /> : (
         <>
           <nav className="segmented nb-tabs" aria-label="Bereich">
-            {TABS.map(([key, label]) => (
+            {ALL_TABS.filter(([key]) => tabs.includes(key)).map(([key, label]) => (
               <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>
             ))}
           </nav>
@@ -64,8 +69,9 @@ function HighlightOverview({ highlights, categories, onSelect, onOpen, onSearch,
   if (!highlights.length) {
     return (
       <div className="pad nb-empty">
-        <p className="muted">Noch keine Markierungen. Markiere im Buch ein Wort oder einen Satz
-          (lange drücken und ziehen) und tippe dann unten auf eine Kategorie.</p>
+        <p className="muted">{onSearch
+          ? 'Noch keine Markierungen. Markiere im Buch ein Wort oder einen Satz (lange drücken und ziehen) und tippe dann unten auf eine Kategorie.'
+          : 'Noch keine Markierungen. Tippe im Player auf „Markieren“, um dir die aktuelle Stelle zu merken.'}</p>
         <button className="btn" onClick={onEditCategories}>Kategorien bearbeiten</button>
       </div>
     )
@@ -113,7 +119,7 @@ function GroupedList({ items, cat, open, setOpen, onSelect, onOpen, onSearch }) 
     const m = new Map()
     for (const h of items) {
       const k = groupKey(h.text) || h.id
-      if (!m.has(k)) m.set(k, { key: k, label: h.text.trim(), items: [] })
+      if (!m.has(k)) m.set(k, { key: k, label: labelOf(h), items: [] })
       m.get(k).items.push(h)
     }
     return [...m.values()].sort((a, b) => a.label.localeCompare(b.label, 'de'))
@@ -137,7 +143,7 @@ function GroupedList({ items, cat, open, setOpen, onSelect, onOpen, onSearch }) 
                 <ul className="nb-list">
                   {g.items.map(h => <HighlightItem key={h.id} h={h} cat={cat} onSelect={onSelect} onOpen={onOpen} compact />)}
                 </ul>
-                <button className="btn small" onClick={() => onSearch(g.label)}>Alle Stellen im Buch suchen</button>
+                {onSearch && <button className="btn small" onClick={() => onSearch(g.label)}>Alle Stellen im Buch suchen</button>}
               </div>
             )}
           </li>
@@ -150,14 +156,14 @@ function GroupedList({ items, cat, open, setOpen, onSelect, onOpen, onSearch }) 
 function HighlightItem({ h, cat, onSelect, onOpen, compact }) {
   return (
     <li className="nb-item">
-      <button className="nb-item-main" onClick={() => onSelect(h.cfi)}>
-        {!compact && <span className="nb-text" style={{ borderColor: colorOf(cat.color).chip }}>{h.text}</span>}
+      <button className="nb-item-main" onClick={() => onSelect(h.position ?? h.cfi)}>
+        {!compact && <span className="nb-text" style={{ borderColor: colorOf(cat.color).chip }}>{labelOf(h)}</span>}
         {compact && h.context && (
           <span className="nb-context">…{h.context.pre}<mark style={{ background: colorOf(cat.color).mark + '99' }}>{h.text}</mark>{h.context.post}…</span>
         )}
         <span className="nb-meta">
           {h.reaction && <span className="nb-emoji">{reactionEmoji(h.reaction)}</span>}
-          {[h.chapter, h.fraction != null ? `${Math.round(h.fraction * 100)} %` : ''].filter(Boolean).join(' · ')}
+          {whereOf(h)}
         </span>
         {h.note && <span className="nb-note">„{h.note}“</span>}
       </button>
