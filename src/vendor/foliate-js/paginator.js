@@ -820,26 +820,43 @@ export class Paginator extends HTMLElement {
             })
         })
     }
+    // Lesezeit: Beim Markieren nicht blättern. Ein Wisch zum Blättern beginnt
+    // schnell; wer lange drückt oder schon Text markiert hat (bzw. an den
+    // Markierungs-Griffen zieht), will markieren – dann wird nicht geblättert.
+    #hasSelection() {
+        const sel = this.#view?.document?.getSelection?.()
+        return !!sel && !sel.isCollapsed && sel.toString().trim() !== ''
+    }
     #onTouchStart(e) {
         const touch = e.changedTouches[0]
         this.#touchState = {
             x: touch?.screenX, y: touch?.screenY,
+            x0: touch?.screenX, y0: touch?.screenY, t0: e.timeStamp,
             t: e.timeStamp,
             vx: 0, xy: 0,
+            moved: false,
+            selecting: this.#hasSelection(),
         }
     }
     #onTouchMove(e) {
         const state = this.#touchState
-        if (state.pinched) return
+        if (!state || state.pinched) return
         state.pinched = globalThis.visualViewport.scale > 1
         if (this.scrolled || state.pinched) return
         if (e.touches.length > 1) {
             if (this.#touchScrolled) e.preventDefault()
             return
         }
-        e.preventDefault()
         const touch = e.changedTouches[0]
         const x = touch.screenX, y = touch.screenY
+        if (state.selecting || this.#hasSelection()) { state.selecting = true; return }
+        if (!state.moved) {
+            const dist = Math.hypot(x - state.x0, y - state.y0)
+            if (dist < 10) return // noch kein Wisch – vielleicht ein langes Drücken
+            if (e.timeStamp - state.t0 > 350) { state.selecting = true; return } // langsam = markieren
+            state.moved = true
+        }
+        e.preventDefault()
         const dx = state.x - x, dy = state.y - y
         const dt = e.timeStamp - state.t
         state.x = x
@@ -851,15 +868,23 @@ export class Paginator extends HTMLElement {
         this.scrollBy(dx, dy)
     }
     #onTouchEnd() {
+        const scrolledBefore = this.#touchScrolled
         this.#touchScrolled = false
         if (this.scrolled) return
+        const state = this.#touchState
+        if (!state) return
+        // Beim Markieren: nicht blättern (nur eine evtl. angefangene Verschiebung zurücksetzen)
+        if (state.selecting || !state.moved) {
+            if (scrolledBefore) requestAnimationFrame(() => this.snap(0, 0))
+            return
+        }
 
         // XXX: Firefox seems to report scale as 1... sometimes...?
         // at this point I'm basically throwing `requestAnimationFrame` at
         // anything that doesn't work
         requestAnimationFrame(() => {
             if (globalThis.visualViewport.scale === 1)
-                this.snap(this.#touchState.vx, this.#touchState.vy)
+                this.snap(state.vx, state.vy)
         })
     }
     // allows one to process rects as if they were LTR and horizontal
