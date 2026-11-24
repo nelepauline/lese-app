@@ -78,20 +78,27 @@ hinzugefügt werden. Lesepositionen und Lesezeichen lassen sich aber abgleichen 
 
 ---
 
+## Bücher bearbeiten
+Unter jedem Buch in der Bibliothek auf **„…“** tippen: Dort lassen sich Titel, Autor/in, Serie,
+Band-Nummer und Cover ändern (die Datei selbst bleibt unverändert). Über **Sortieren → Serie**
+stehen die Bände einer Serie der Reihe nach unter einer Überschrift. Löschen geht ebenfalls dort.
+
 ## 4. Geräte abgleichen (über GitHub)
 Auf **jedem** Gerät einmal einrichten:
-1. In der Bibliothek oben auf das **Wolken-Symbol** tippen.
+1. In der Bibliothek oben auf das **Pfeil-Symbol** (zwei Pfeile im Kreis) tippen.
 2. Einen Namen für das Gerät eingeben (z. B. „iPhone“).
 3. **„GitHub öffnen“** → bei *Expiration* „No expiration“ wählen → ganz unten **Generate token**
    → den Schlüssel (beginnt mit `ghp_`) kopieren.
 4. Zurück in die App, Schlüssel einfügen, **Verbinden**.
 
-Danach werden Positionen und Lesezeichen automatisch abgeglichen. Öffnest du ein Buch, das auf
+Danach werden Positionen, Lesezeichen und selbst bearbeitete Buch-Angaben (Titel, Autor/in,
+Serie, Band, eigenes Cover) automatisch abgeglichen. Öffnest du ein Buch, das auf
 einem anderen Gerät an einer anderen Stelle ist, fragt die App, ob du dorthin springen möchtest.
 
 - Gespeichert wird in einem privaten Gist in deinem GitHub-Konto
   („Lesezeit – Synchronisation“, bitte nicht löschen). Die Bücher selbst werden **nicht** hochgeladen.
 - Dasselbe Buch wird auf allen Geräten an der Datei erkannt – also überall dieselbe Datei verwenden.
+- Eigene Cover liegen in einem zweiten privaten Gist („Lesezeit – eigene Cover“).
 - Schlüssel verloren oder abgelaufen? Einfach einen neuen erstellen und neu verbinden.
 
 ---

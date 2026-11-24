@@ -79,3 +79,32 @@ export async function read(token, id) {
 export async function write(token, id, data) {
   await gh(token, `/gists/${id}`, { method: 'PATCH', body: { files: { [FILE]: { content: JSON.stringify(data) } } } })
 }
+
+// ---- Zweiter Gist für eigene Cover (Bilder als Text) ----
+// Getrennt, damit der normale Abgleich klein und schnell bleibt.
+const COVERS_DESCRIPTION = 'Lesezeit – eigene Cover (bitte nicht löschen)'
+
+export async function createCoversGist(token) {
+  const created = await gh(token, '/gists', {
+    method: 'POST',
+    body: { description: COVERS_DESCRIPTION, public: false, files: { 'README.txt': { content: 'Cover-Bilder für Lesezeit.' } } },
+  })
+  return created.id
+}
+
+// Alle Dateien eines Gists → { name: inhalt }
+export async function readFiles(token, id) {
+  const g = await gh(token, `/gists/${id}`)
+  const out = {}
+  for (const [name, f] of Object.entries(g.files ?? {})) {
+    let text = f.content
+    if (f.truncated && f.raw_url) text = await (await fetch(f.raw_url, { cache: 'no-store' })).text()
+    out[name] = text
+  }
+  return out
+}
+
+export async function writeFiles(token, id, files) {
+  const body = { files: Object.fromEntries(Object.entries(files).map(([n, content]) => [n, { content }])) }
+  await gh(token, `/gists/${id}`, { method: 'PATCH', body })
+}

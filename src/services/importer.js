@@ -6,7 +6,7 @@ import { isMp4, readAudiobookInfo } from '../formats/m4b/mp4.js'
 import { fingerprint } from './sync/fingerprint.js'
 
 // Verkleinert das Cover, damit die Bibliothek schnell lädt.
-async function makeThumbnail(blob, maxHeight = 600) {
+export async function makeThumbnail(blob, maxHeight = 600) {
   if (!blob) return null
   try {
     const bmp = await createImageBitmap(blob)

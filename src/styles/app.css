@@ -101,7 +101,17 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .library.has-mini-player { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 .library-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .library-header h1 { font-size: 30px; letter-spacing: -.01em; }
-.library > .segmented { max-width: 360px; margin-bottom: 20px; }
+.library-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 20px; }
+.library-tools .segmented { flex: 1 1 260px; max-width: 360px; }
+.sort-select { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.sort-select select {
+  font: inherit; font-size: 14px; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+}
+.book-group + .book-group { margin-top: 32px; }
+.group-title { font-size: 17px; margin: 0 0 14px; }
+.group-title .muted { font-weight: 400; font-size: 14px; margin-left: 4px; }
+.book-series { font-size: 12px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
 
 .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
 .empty h2 { color: var(--fg); margin: 12px 0 8px; font-size: 20px; }
@@ -398,3 +408,19 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
   .btn-add { padding: 9px 11px; }
   .library-header h1 { font-size: 26px; }
 }
+
+/* ===== Buch bearbeiten ===== */
+.edit-cover { display: flex; gap: 16px; align-items: center; margin: 4px 0 6px; }
+.edit-cover-img { width: 84px; aspect-ratio: 2 / 3; flex-shrink: 0; }
+.edit-cover-img .cover-title { font-size: 11px; }
+.edit-cover-img .cover-author { display: none; }
+.edit-cover-img .cover-placeholder { padding: 6px; }
+.edit-cover-actions { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.edit-series { display: flex; gap: 10px; }
+.edit-series > div { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.edit-series > .edit-series-index { flex: 0 0 76px; }
+.edit-series label { margin-top: 10px; }
+.input:disabled { opacity: .5; }
+.edit-danger { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.btn-danger { color: #b3261e; }
+[data-theme="dark"] .btn-danger { color: #f2b8b5; }

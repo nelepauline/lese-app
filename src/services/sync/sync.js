@@ -5,12 +5,14 @@
 //    weiter, wird beim Öffnen gefragt (checkForNewerPosition).
 //  - Lesezeichen: werden zusammengeführt; gelöschte werden als "gelöscht"
 //    vermerkt, damit sie nicht von einem anderen Gerät zurückkommen.
+//  - Selbst bearbeitete Angaben (Titel, Autor/in, Serie, Band) und eigene
+//    Cover: die neueste Änderung gewinnt. Cover liegen in einem zweiten Gist.
 //
 // Ablauf: gelesen wird beim Start, beim Zurückkehren in die App und beim
 // Öffnen eines Buchs. Geschrieben wird gesammelt (höchstens alle 30 Sek.)
 // und sofort, wenn die App in den Hintergrund geht.
 import { useSyncExternalStore } from 'react'
-import { listBooks, getAllProgress, listBookmarks, addBookmark, deleteBookmark, getBook, getProgress, newId } from '../../db/db.js'
+import { listBooks, getAllProgress, listBookmarks, addBookmark, deleteBookmark, getBook, getProgress, newId, updateBook, getCover, putCover } from '../../db/db.js'
 import { registerSyncTarget } from '../progress.js'
 import { bookKey } from './fingerprint.js'
 import * as gist from './githubGist.js'
@@ -46,6 +48,7 @@ let state = {
   syncing: false,
   lastSyncAt: load(LAST_KEY, 0),
   error: null,
+  dataVersion: 0,   // zählt hoch, wenn der Abgleich Bücher auf diesem Gerät geändert hat
 }
 const listeners = new Set()
 function setState(patch) {
@@ -93,7 +96,9 @@ async function doSync() {
       remote = await gist.read(conf.token, conf.gistId)
     }
     const tombs = load(TOMB_KEY, {})
-    if (await merge(remote, tombs)) await gist.write(conf.token, conf.gistId, remote)
+    const { changed, localChanged } = await merge(remote, tombs)
+    if (changed) await gist.write(conf.token, conf.gistId, remote)
+    if (localChanged) setState({ dataVersion: state.dataVersion + 1 })
     // nur die verarbeiteten Löschvermerke entfernen
     const rest = load(TOMB_KEY, {})
     for (const id of Object.keys(tombs)) delete rest[id]
@@ -116,13 +121,25 @@ function samePlace(a, b) {
   return a.cfi === b.cfi
 }
 
+const META = ['title', 'author', 'series', 'seriesIndex']
+const pick = (obj, keys) => Object.fromEntries(keys.map(k => [k, obj?.[k] ?? '']))
+
+const blobToDataUrl = blob => new Promise((res, rej) => {
+  const r = new FileReader()
+  r.onload = () => res(r.result)
+  r.onerror = () => rej(r.error)
+  r.readAsDataURL(blob)
+})
+const dataUrlToBlob = async url => (await fetch(url)).blob()
+
 async function merge(remote, tombs) {
   remote.app = 'lesezeit'
   remote.version = 1
   remote.books ??= {}
   const me = device()
   const [books, progress] = await Promise.all([listBooks(), getAllProgress()])
-  let changed = false
+  let changed = false, localChanged = false
+  const coverUploads = {}, coverDownloads = []
 
   for (const book of books) {
     const key = await bookKey(book)
@@ -133,6 +150,30 @@ async function merge(remote, tombs) {
       changed = true
     }
     entry.bookmarks ??= {}
+
+    // Bearbeitete Angaben: die neuere Änderung gewinnt
+    const lm = book.metaEditedAt ?? 0, rm = entry.meta
+    if (lm && (!rm || lm > rm.updatedAt)) {
+      entry.meta = { ...pick(book, META), updatedAt: lm, deviceId: me.id }
+      entry.title = book.title; entry.author = book.author ?? ''
+      changed = true
+    } else if (rm && rm.updatedAt > lm) {
+      await updateBook(book.id, { ...pick(rm, META), metaEditedAt: rm.updatedAt })
+      localChanged = true
+    }
+
+    // Eigenes Cover: die neuere Änderung gewinnt
+    const lc = book.coverEditedAt ?? 0, rc = entry.cover?.updatedAt ?? 0
+    if (lc > rc) {
+      const blob = await getCover(book.id)
+      if (blob) {
+        coverUploads[`${key}.txt`] = await blobToDataUrl(blob)
+        entry.cover = { updatedAt: lc, deviceId: me.id }
+        changed = true
+      }
+    } else if (rc > lc) {
+      coverDownloads.push({ book, key, updatedAt: rc })
+    }
 
     // Position: die neuere gewinnt
     const lp = progress[book.id], rp = entry.progress
@@ -169,7 +210,28 @@ async function merge(remote, tombs) {
       else await addBookmark({ id, bookId: book.id, ...r })
     }
   }
-  return changed
+
+  // Cover hochladen (vor der Hauptdatei, damit nie auf ein fehlendes Bild verwiesen wird)
+  if (Object.keys(coverUploads).length) {
+    remote.coversGist ||= await gist.createCoversGist(conf.token)
+    await gist.writeFiles(conf.token, remote.coversGist, coverUploads)
+  }
+  // Neuere Cover von anderen Geräten holen
+  if (coverDownloads.length && remote.coversGist) {
+    try {
+      const files = await gist.readFiles(conf.token, remote.coversGist)
+      for (const { book, key, updatedAt } of coverDownloads) {
+        const url = files[`${key}.txt`]
+        if (!url?.startsWith('data:image/')) continue
+        await putCover(book.id, await dataUrlToBlob(url))
+        await updateBook(book.id, { coverEditedAt: updatedAt })
+        localChanged = true
+      }
+    } catch (err) {
+      console.warn('Cover konnten nicht geladen werden', err)
+    }
+  }
+  return { changed, localChanged }
 }
 
 // ---- Beim Öffnen eines Buchs: war ein anderes Gerät weiter? ----

@@ -100,6 +100,9 @@ export async function removeDownload(id) {
 }
 
 // ---- Dateien & Cover ----
+export async function putCover(id, blob) {
+  return (await db()).put('covers', blob, id)
+}
 export async function getFile(id) {
   return (await db()).get('files', id)
 }

@@ -19,6 +19,17 @@ export async function isZip(file) {
   return b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04
 }
 
+// Serie aus den EPUB-Angaben (EPUB 3 oder Calibre) → { series, seriesIndex }
+export function readSeries(metadata) {
+  let s = metadata?.belongsTo?.series
+  if (Array.isArray(s)) s = s[0]
+  const series = langString(s?.name).trim()
+  if (!series) return { series: '', seriesIndex: '' }
+  const pos = s.position
+  const seriesIndex = pos == null || Number.isNaN(pos) ? '' : String(pos)
+  return { series, seriesIndex }
+}
+
 export async function readEpubInfo(file) {
   const book = await makeBook(file)
   const cover = await Promise.resolve(book.getCover?.()).catch(() => null)
@@ -26,6 +37,7 @@ export async function readEpubInfo(file) {
     title: langString(book.metadata?.title) || file.name.replace(/\.epub$/i, ''),
     author: formatAuthor(book.metadata?.author),
     language: book.metadata?.language ?? '',
+    ...readSeries(book.metadata),
     // Vorbereitung Etappe 1: EPUB 3 mit Media Overlays (z. B. von Storyteller)
     hasMediaOverlay: book.sections?.some(s => s.mediaOverlay) ?? false,
     cover: cover ?? null,

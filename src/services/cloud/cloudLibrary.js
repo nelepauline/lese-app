@@ -151,7 +151,9 @@ export async function download(book) {
     const blob = await od.downloadFile(book.remote.itemId, progress)
     const file = new File([blob], book.fileName)
     const { type, meta, blob: stored, cover, syncKey } = await analyzeFile(file)
-    await storeDownload({ ...book, type, ...meta, size: file.size, syncKey, fileStored: true }, stored, cover)
+    // Selbst bearbeitete Angaben und eigenes Cover behalten
+    const edited = book.metaEditedAt ? { title: book.title, author: book.author, series: book.series, seriesIndex: book.seriesIndex } : {}
+    await storeDownload({ ...book, type, ...meta, ...edited, size: file.size, syncKey, fileStored: true }, stored, book.coverEditedAt ? null : cover)
     requestPersistentStorage()
     bump()
   } catch (err) {

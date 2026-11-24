@@ -11,12 +11,30 @@ import SyncPanel from './SyncPanel.jsx'
 import { useSyncState } from '../services/sync/sync.js'
 import CloudPanel from './CloudPanel.jsx'
 import { useCloudState, download, removeDownload, signIn, clearError, PROVIDER_NAME } from '../services/cloud/cloudLibrary.js'
+import EditBook from './EditBook.jsx'
+import { seriesLabel, seriesNumber, bandLabel } from '../services/bookMeta.js'
 
 const FILTERS = [
   ['all', 'Alle'],
   ['epub', 'Bücher'],
   ['audiobook', 'Hörbücher'],
 ]
+
+const SORTS = [
+  ['recent', 'Zuletzt gelesen'],
+  ['title', 'Titel'],
+  ['author', 'Autor/in'],
+  ['series', 'Serie'],
+]
+
+const byText = (a, b) => (a || '').localeCompare(b || '', 'de', { numeric: true, sensitivity: 'base' })
+// Nachname zuerst sortieren: "Jane Austen" → "Austen Jane"
+const authorSortKey = author => {
+  const first = (author || '').split(',')[0].trim()
+  const parts = first.split(/\s+/)
+  return parts.length > 1 ? `${parts.at(-1)} ${parts.slice(0, -1).join(' ')}` : first
+}
+const bySeries = (a, b) => (seriesNumber(a) - seriesNumber(b)) || byText(a.title, b.title)
 
 export default function Library() {
   const [books, setBooks] = useState(null)
@@ -30,6 +48,8 @@ export default function Library() {
   const [showSync, setShowSync] = useState(false)
   const cloud = useCloudState()
   const [showCloud, setShowCloud] = useState(false)
+  const [sort, setSort] = useState(() => localStorage.getItem('lib-sort') || 'recent')
+  const [editing, setEditing] = useState(null)
 
   const refresh = useCallback(async () => {
     const [list, prog] = await Promise.all([listBooks(), getAllProgress()])
@@ -40,8 +60,9 @@ export default function Library() {
     setProgress(prog)
   }, [])
 
-  useEffect(() => { refresh() }, [refresh, cloud.version])
-  // Gerade bei Microsoft angemeldet, aber noch kein Ordner → Auswahl öffnen
+  useEffect(() => { refresh() }, [refresh, cloud.version, sync.dataVersion])
+  useEffect(() => { try { localStorage.setItem('lib-sort', sort) } catch { /* egal */ } }, [sort])
+  // Gerade beim Cloud-Dienst angemeldet, aber noch kein Ordner → Auswahl öffnen
   useEffect(() => { if (cloud.justSignedIn && !cloud.folder) setShowCloud(true) }, [cloud.justSignedIn, cloud.folder])
   useEffect(() => { sessionStorage.setItem('lib-filter', filter) }, [filter])
 
@@ -70,6 +91,7 @@ export default function Library() {
     if (!confirm(`„${book.title}“ vom Gerät löschen?`)) return
     if (audio.book?.id === book.id) audio.close()
     await deleteBook(book.id)
+    setEditing(null)
     refresh()
   }
 
@@ -77,6 +99,7 @@ export default function Library() {
     if (!confirm(`Download von „${book.title}“ entfernen? Das Buch bleibt in ${PROVIDER_NAME} und deine Position bleibt gespeichert.`)) return
     if (audio.book?.id === book.id) audio.close()
     await removeDownload(book)
+    setEditing(null)
   }
 
   async function open(book) {
@@ -88,6 +111,69 @@ export default function Library() {
   }
 
   const visible = (books ?? []).filter(b => filter === 'all' || b.type === filter)
+  if (sort === 'title') visible.sort((a, b) => byText(a.title, b.title))
+  if (sort === 'author') visible.sort((a, b) => byText(authorSortKey(a.author), authorSortKey(b.author)) || bySeries(a, b))
+
+  // Nach Serie: Gruppen mit Überschrift, Bücher ohne Serie am Ende
+  let groups = [{ name: null, books: visible }]
+  if (sort === 'series') {
+    const map = new Map()
+    for (const b of visible) {
+      const k = b.series || ''
+      if (!map.has(k)) map.set(k, [])
+      map.get(k).push(b)
+    }
+    groups = [...map.entries()]
+      .sort(([a], [b]) => (!a) - (!b) || byText(a, b))
+      .map(([name, list]) => ({ name: name || 'Ohne Serie', books: list.sort(name ? bySeries : (a, b) => byText(a.title, b.title)) }))
+  }
+
+  const allSeries = [...new Set((books ?? []).map(b => b.series).filter(Boolean))].sort(byText)
+  const allAuthors = [...new Set((books ?? []).map(b => b.author).filter(Boolean))].sort(byText)
+
+  function renderBook(book) {
+    const p = progress[book.id]
+    const f = p?.fraction ?? 0
+    const inCloud = book.fileStored === false
+    const dl = cloud.downloads[book.id]
+    const series = sort === 'series' ? bandLabel(book) : seriesLabel(book)
+    return (
+      <li key={book.id} className={`book-card ${inCloud ? 'in-cloud' : ''}`}>
+        <button className="book-open" onClick={() => open(book)} disabled={dl != null}>
+          <div className="cover-wrap">
+            <Cover book={book} />
+            {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
+            {inCloud && dl == null && <span className="badge badge-left" title={`In ${PROVIDER_NAME} – zum Herunterladen tippen`}><Icon name="cloud" size={14} /></span>}
+            {dl != null && (
+              <div className="download-overlay">
+                <div className="download-ring" style={{ '--p': dl }} />
+                <span>{Math.round(dl * 100)} %</span>
+              </div>
+            )}
+          </div>
+          <div className="book-title">{book.title}</div>
+          {series && <div className="book-series">{series}</div>}
+          {book.author && <div className="book-author">{book.author}</div>}
+        </button>
+        <div className="book-meta">
+          {inCloud ? (
+            <>
+              <span className="book-percent cloud-size">{p ? `${percent(f)} · ` : ''}{fileSize(book.size)}</span>
+              <button className="icon-btn small" onClick={() => open(book)} disabled={dl != null}
+                aria-label="Herunterladen" title="Herunterladen"><Icon name="download" size={16} /></button>
+            </>
+          ) : (
+            <>
+              <div className="progress-bar"><span style={{ width: `${f * 100}%` }} /></div>
+              <span className="book-percent">{p ? percent(f) : 'Neu'}</span>
+            </>
+          )}
+          <button className="icon-btn small" onClick={() => setEditing(book)}
+            aria-label={`„${book.title}“ bearbeiten`} title="Bearbeiten"><Icon name="more" size={16} /></button>
+        </div>
+      </li>
+    )
+  }
 
   return (
     <div className={`library ${audio.book ? 'has-mini-player' : ''}`}>
@@ -114,11 +200,19 @@ export default function Library() {
       </header>
 
       {books?.length > 0 && (
-        <nav className="segmented" aria-label="Filter">
-          {FILTERS.map(([key, label]) => (
-            <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>
-          ))}
-        </nav>
+        <div className="library-tools">
+          <nav className="segmented" aria-label="Filter">
+            {FILTERS.map(([key, label]) => (
+              <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>
+            ))}
+          </nav>
+          <label className="sort-select">
+            <span>Sortieren</span>
+            <select value={sort} onChange={e => setSort(e.target.value)}>
+              {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </label>
+        </div>
       )}
 
       {busy && <div className="notice">{busy}</div>}
@@ -148,60 +242,20 @@ export default function Library() {
         </div>
       )}
 
-      <ul className="book-grid">
-        {visible.map(book => {
-          const p = progress[book.id]
-          const f = p?.fraction ?? 0
-          const inCloud = book.fileStored === false
-          const dl = cloud.downloads[book.id]
-          return (
-            <li key={book.id} className={`book-card ${inCloud ? 'in-cloud' : ''}`}>
-              <button className="book-open" onClick={() => open(book)} disabled={dl != null}>
-                <div className="cover-wrap">
-                  <Cover book={book} />
-                  {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
-                  {inCloud && dl == null && <span className="badge badge-left" title={`In ${PROVIDER_NAME} – zum Herunterladen tippen`}><Icon name="cloud" size={14} /></span>}
-                  {dl != null && (
-                    <div className="download-overlay">
-                      <div className="download-ring" style={{ '--p': dl }} />
-                      <span>{Math.round(dl * 100)} %</span>
-                    </div>
-                  )}
-                </div>
-                <div className="book-title">{book.title}</div>
-                {book.author && <div className="book-author">{book.author}</div>}
-              </button>
-              <div className="book-meta">
-                {inCloud ? (
-                  <>
-                    <span className="book-percent cloud-size">{p ? `${percent(f)} · ` : ''}{fileSize(book.size)}</span>
-                    <button className="icon-btn small" onClick={() => open(book)} disabled={dl != null}
-                      aria-label="Herunterladen" title="Herunterladen"><Icon name="download" size={16} /></button>
-                  </>
-                ) : (
-                  <>
-                    <div className="progress-bar"><span style={{ width: `${f * 100}%` }} /></div>
-                    <span className="book-percent">{p ? percent(f) : 'Neu'}</span>
-                    {book.remote ? (
-                      <button className="icon-btn small" onClick={() => onRemoveDownload(book)}
-                        aria-label="Download entfernen" title={`Download entfernen (bleibt in ${PROVIDER_NAME})`}>
-                        <Icon name="downloadOff" size={16} />
-                      </button>
-                    ) : (
-                      <button className="icon-btn small" onClick={() => onDelete(book)} aria-label="Löschen" title="Löschen">
-                        <Icon name="trash" size={16} />
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+      {groups.map(g => (
+        <section key={g.name ?? 'all'} className="book-group">
+          {g.name && <h2 className="group-title">{g.name} <span className="muted">{g.books.length}</span></h2>}
+          <ul className="book-grid">{g.books.map(renderBook)}</ul>
+        </section>
+      ))}
 
       {showSync && <SyncPanel onClose={() => setShowSync(false)} />}
       {showCloud && <CloudPanel onClose={() => setShowCloud(false)} />}
+      {editing && (
+        <EditBook book={editing} allSeries={allSeries} allAuthors={allAuthors} cloudName={PROVIDER_NAME}
+          onClose={() => setEditing(null)} onSaved={refresh}
+          onDelete={onDelete} onRemoveDownload={onRemoveDownload} />
+      )}
     </div>
   )
 }
