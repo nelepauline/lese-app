@@ -10,7 +10,7 @@ import { useSyncExternalStore } from 'react'
 import * as api from './api.js'
 import { getBook, updateBook, getProgress, listHighlights, putHighlight, getHighlight } from '../../db/db.js'
 import { registerSyncTarget } from '../progress.js'
-import { reactionEmoji, REACTIONS } from '../highlights.js'
+import { reactionEmoji, REACTIONS, getCategoryData } from '../highlights.js'
 
 const USER_KEY = 'lese-app:hc-user'        // { id, username }
 const OPTS_KEY = 'lese-app:hc-options'     // { journal: true }
@@ -202,19 +202,31 @@ export async function pushLatestNow() {
 
 // ---- Lesetagebuch: Zitate und Momente ----
 // Was soll aus dieser Markierung werden? → { event, entry } oder null
-export function journalFor(h) {
+//  - Zitate (Kategorie "Zitate"): EIN Eintrag als "quote"; Reaktion und
+//    Notiz stehen darunter, z. B. "— 🤯 krass · meine Notiz"
+//  - Momente (Kategorie "Momente" oder Markierung mit Reaktion): "note",
+//    z. B. "🤯 krass: „…“"
+export function journalFor(h, categories = getCategoryData().list) {
   if (h.position != null) return null // Hörbuch-Markierungen: nicht gewünscht
   const text = (h.text ?? '').trim()
   if (!text) return null
-  if (h.catId === 'quotes') return { event: 'quote', entry: h.note ? `${text}\n\n— ${h.note}` : text }
-  if (h.reaction) {
-    const label = REACTIONS.find(r => r[0] === h.reaction)?.[2] ?? ''
-    return { event: 'note', entry: `${reactionEmoji(h.reaction)} ${label}: „${text}“${h.note ? `\n${h.note}` : ''}` }
+  const emo = h.reaction ? `${reactionEmoji(h.reaction)} ${REACTIONS.find(r => r[0] === h.reaction)?.[2] ?? ''}`.trim() : ''
+  const note = (h.note ?? '').trim()
+  if (h.catId === 'quotes') {
+    const extra = [emo, note].filter(Boolean).join(' · ')
+    return { event: 'quote', entry: extra ? `${text}\n\n— ${extra}` : text }
+  }
+  const isMomentCat = /^moment/i.test(categories.find(c => c.id === h.catId)?.name ?? '')
+  if (isMomentCat || h.reaction) {
+    return { event: 'note', entry: `${emo ? `${emo}: ` : ''}„${text}“${note ? `\n${note}` : ''}` }
   }
   return null
 }
 
 const journalQueue = new Map() // highlightId → Promise (nacheinander)
+// Sofort gemerkte Hardcover-IDs (zusätzlich zur Datenbank) – verhindert
+// doppeltes Hochladen, falls die Markierung gerade parallel gespeichert wird
+const journalIds = new Map()  // highlightId → { id, event }
 
 // Nach jeder Änderung einer Markierung aufrufen
 export function highlightChanged(h) {
@@ -238,16 +250,21 @@ async function syncHighlight(id) {
   const want = journalFor(h)
   const sentText = want ? `${want.event}|${want.entry}` : ''
   if (sentText === (h.hcSent ?? '') && (!!h.hcJournalId === !!want)) return
-  let hcJournalId = h.hcJournalId ?? null
-  if (!want && hcJournalId) { await api.deleteJournal(hcJournalId); hcJournalId = null }
-  else if (want && hcJournalId && h.hcEvent === want.event) await api.updateJournal(hcJournalId, want.entry, PRIVACY_FOLLOWERS)
+  const known = journalIds.get(h.id)
+  let hcJournalId = h.hcJournalId ?? known?.id ?? null
+  const hcEvent = h.hcJournalId ? h.hcEvent : known?.event ?? h.hcEvent
+  if (!want && hcJournalId) { await api.deleteJournal(hcJournalId); hcJournalId = null; journalIds.delete(h.id) }
+  else if (want && hcJournalId && hcEvent === want.event) await api.updateJournal(hcJournalId, want.entry, PRIVACY_FOLLOWERS)
   else if (want) {
     if (hcJournalId) await api.deleteJournal(hcJournalId).catch(() => {})
     hcJournalId = await api.insertJournal({ bookId: link.bookId, event: want.event, entry: want.entry, privacy: PRIVACY_FOLLOWERS })
+    journalIds.set(h.id, { id: hcJournalId, event: want.event })
   }
   // Merken, was gesendet wurde (läuft über den Geräte-Abgleich mit, damit
   // andere Geräte nicht doppelt hochladen)
-  await putHighlight({ ...h, hcJournalId, hcEvent: want?.event ?? null, hcSent: sentText, updatedAt: Date.now() })
+  // Frisch lesen und nur die Hardcover-Angaben ergänzen (nichts überschreiben)
+  const latest = (await getHighlight(h.id)) ?? h
+  await putHighlight({ ...latest, hcJournalId, hcEvent: want?.event ?? null, hcSent: sentText, updatedAt: Date.now() })
   if (want) setState({ lastSent: { title: book.title, text: want.event === 'quote' ? 'Zitat hochgeladen' : 'Moment hochgeladen', at: Date.now() }, error: null })
   scheduleDeviceSync()
 }

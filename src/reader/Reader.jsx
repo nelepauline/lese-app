@@ -214,15 +214,20 @@ export default function Reader({ id }) {
       if (e.defaultPrevented || e.target.closest?.('a[href]')) return
       if (!doc.getSelection()?.isCollapsed) return
       const frame = doc.defaultView.frameElement
-      const x = (frame?.getBoundingClientRect().left ?? 0) + e.clientX
-      const w = window.innerWidth
+      const rect = frame?.getBoundingClientRect()
+      const x = (rect?.left ?? 0) + e.clientX
+      const y = (rect?.top ?? 0) + e.clientY
+      const w = window.innerWidth, hgt = window.innerHeight
+      // Blättern nur an den schmalen Rändern links/rechts (je 20 %) – die ganze
+      // Mitte und die Streifen oben/unten blenden nur die Leisten ein/aus
+      const edgeBand = y < hgt * 0.18 || y > hgt * 0.82
       // Kurz warten: Tippen auf eine Markierung öffnet diese statt zu blättern
       annotationTapped.current = false
       setTimeout(() => {
         if (annotationTapped.current) return
         const view = viewRef.current
-        if (settingsRef.current.flow === 'paginated' && x < w * 0.28) view?.goLeft()
-        else if (settingsRef.current.flow === 'paginated' && x > w * 0.72) view?.goRight()
+        if (settingsRef.current.flow === 'paginated' && !edgeBand && x < w * 0.2) view?.goLeft()
+        else if (settingsRef.current.flow === 'paginated' && !edgeBand && x > w * 0.8) view?.goRight()
         else setChrome(c => !c)
       }, 0)
     })
@@ -499,6 +504,7 @@ export default function Reader({ id }) {
       <footer className="reader-bar reader-bottom">
         {chrome && ready && (
           <input type="range" className="slider" min="0" max="1" step="0.001"
+            style={{ '--p': `${(loc?.fraction ?? 0) * 100}%` }}
             value={loc?.fraction ?? 0} aria-label="Position im Buch"
             onChange={e => viewRef.current?.goToFraction(parseFloat(e.target.value))} />
         )}

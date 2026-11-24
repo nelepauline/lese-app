@@ -149,6 +149,7 @@ export default function PlayerScreen({ id }) {
 
           <div className="player-scrub">
             <input type="range" className="slider" min={chStart} max={chEnd} step="1" value={pos}
+              style={{ '--p': `${Math.min(100, Math.max(0, ((pos - chStart) / chLen) * 100))}%` }}
               aria-label="Position im Kapitel"
               onChange={e => setScrub(parseFloat(e.target.value))}
               onPointerUp={() => { if (scrub != null) { audio.seekTo(scrub); setScrub(null) } }}

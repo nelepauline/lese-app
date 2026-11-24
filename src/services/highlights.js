@@ -1,7 +1,7 @@
 // Markierungen: Kategorien (selbst anlegbar), Pastellfarben, Reaktionen.
 // Die Markierungen selbst liegen in der Datenbank (db.js → highlights).
 import { useSyncExternalStore } from 'react'
-import { listHighlights, putHighlight, deleteHighlight as dbDelete, newId } from '../db/db.js'
+import { listHighlights, putHighlight, getHighlight, deleteHighlight as dbDelete, newId } from '../db/db.js'
 import { noteDeleted, scheduleSync } from './sync/sync.js'
 import { highlightChanged, highlightRemoved } from './hardcover/hardcover.js'
 
@@ -92,7 +92,11 @@ export async function createHighlight(data) {
 }
 
 export async function updateHighlight(h, changes) {
-  const next = { ...h, ...changes, updatedAt: Date.now() }
+  // Vom aktuellen Stand in der Datenbank ausgehen – sonst könnten Angaben
+  // verloren gehen, die inzwischen gespeichert wurden (z. B. dass das Zitat
+  // schon bei Hardcover ist)
+  const cur = (await getHighlight(h.id)) ?? h
+  const next = { ...cur, ...changes, updatedAt: Date.now() }
   await putHighlight(next)
   scheduleSync(3000)
   highlightChanged(next)
