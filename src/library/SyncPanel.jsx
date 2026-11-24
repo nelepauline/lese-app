@@ -137,6 +137,7 @@ function HardcoverSection() {
 
 // ---- Datensicherung ----
 function BackupSection() {
+  const [logins, setLogins] = useState(true)
   const [busy, setBusy] = useState(null)
   const [msg, setMsg] = useState(null)
   const input = useRef()
@@ -144,9 +145,9 @@ function BackupSection() {
   async function onSave() {
     setBusy('Erstelle Sicherung …'); setMsg(null)
     try {
-      const { file, counts } = await createBackup()
+      const { file, counts } = await createBackup({ includeLogins: logins })
       const how = await saveFile(file)
-      if (how !== 'aborted') setMsg({ ok: true, text: `Sicherung erstellt: ${counts.books} Bücher, ${counts.highlights} Markierungen, ${counts.images} Bilder (${Math.max(1, Math.round(file.size / 1024))} KB).` })
+      if (how !== 'aborted') setMsg({ ok: true, text: `Sicherung erstellt: ${counts.books} Bücher, ${counts.highlights} Markierungen, ${counts.images} Bilder${counts.logins ? ', mit Anmeldungen' : ''} (${Math.max(1, Math.round(file.size / 1024))} KB).` })
     } catch (err) {
       setMsg({ ok: false, text: err.message || String(err) })
     } finally { setBusy(null) }
@@ -160,10 +161,10 @@ function BackupSection() {
     try {
       const data = await readBackup(file)
       const when = new Date(data.createdAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
-      if (!confirm(`Sicherung vom ${when} wiederherstellen (${data.books?.length ?? 0} Bücher)? Vorhandenes wird ergänzt, nichts wird gelöscht.`)) return
+      if (!confirm(`Sicherung vom ${when} wiederherstellen (${data.books?.length ?? 0} Bücher${data.hasLogins ? ', mit Anmeldungen für Abgleich und Hardcover' : ''})? Vorhandenes wird ergänzt, nichts wird gelöscht.`)) return
       setBusy('Stelle wieder her …')
       const r = await restoreBackup(data)
-      alert(`Fertig: ${r.added} Bücher hinzugefügt, ${r.merged} ergänzt. Bücher mit „Datei fehlt“: Datei einfach über „Hinzufügen“ wieder auswählen – sie wird automatisch zugeordnet.`)
+      alert(`Fertig: ${r.added} Bücher hinzugefügt, ${r.merged} ergänzt.${data.hasLogins ? ' Abgleich und Hardcover sind wieder verbunden.' : ''} Bücher mit „Datei fehlt“: Datei einfach über „Hinzufügen“ wieder auswählen – sie wird automatisch zugeordnet.`)
       location.reload()
     } catch (err) {
       setMsg({ ok: false, text: err.message || String(err) })
@@ -174,8 +175,15 @@ function BackupSection() {
   return (
     <div className="settings sync-panel hc-section">
       <h3 className="hc-title">Datensicherung</h3>
-      <p className="muted small">Sichert Positionen, Markierungen, Notizen, Bilder, Statistik und Einstellungen in eine Datei
-        (ohne die Buchdateien und ohne Anmeldungen). Praktisch, bevor du die App neu zum Home-Bildschirm hinzufügst.</p>
+      <p className="muted small">Sichert Positionen, Markierungen, Notizen, Bilder, Statistik, Gerät und alle Einstellungen
+        (Reader, Farbschema, Ansicht) in eine Datei – ohne die Buchdateien. Praktisch, bevor du die App neu zum
+        Home-Bildschirm hinzufügst.</p>
+      <label className="check">
+        <input type="checkbox" checked={logins} onChange={e => setLogins(e.target.checked)} />
+        Anmeldungen mitsichern (Geräte-Abgleich und Hardcover)
+      </label>
+      {logins && <p className="muted small">Die Datei enthält dann deine Zugangsschlüssel – bewahre sie privat auf (nicht teilen).
+        Notfalls kannst du sie bei GitHub (Token löschen) und Hardcover (Apps widerrufen) ungültig machen.</p>}
       <div className="sync-buttons">
         <button className="btn" onClick={onSave} disabled={!!busy}>Sicherung erstellen</button>
         <button className="btn" onClick={() => input.current.click()} disabled={!!busy}>Wiederherstellen</button>

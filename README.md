@@ -116,12 +116,15 @@ iOS übernimmt ein neues App-Icon erst, wenn man die App neu zum Home-Bildschirm
 und löscht dabei ihre Daten. Deshalb vorher sichern:
 1. Pfeil-Symbol → **Datensicherung** → „Sicherung erstellen“ → im Teilen-Menü „In Dateien sichern“.
    Enthalten: Bücher-Angaben, Cover, Positionen, Lesezeichen, Markierungen, Notizen, Bilder,
-   Statistik, Einstellungen. Nicht enthalten: die Buchdateien und Anmeldungen.
+   Statistik, Gerät und alle Einstellungen (Reader, Farbschema, Ansicht) – mit Häkchen auch die
+   Anmeldungen für Geräte-Abgleich und Hardcover (dann die Datei privat aufbewahren).
+   Nicht enthalten: die Buchdateien.
 2. App vom Home-Bildschirm löschen, Seite in Safari öffnen, neu „Zum Home-Bildschirm“.
 3. Pfeil-Symbol → „Wiederherstellen“ → die Sicherungsdatei wählen.
 4. Bücher zeigen „Datei fehlt“: über „Hinzufügen“ die Dateien wieder auswählen (auch mehrere
    auf einmal) – sie werden automatisch dem richtigen Buch zugeordnet. Oder auf ein Buch tippen.
-5. GitHub-Abgleich und Hardcover neu verbinden.
+5. Mit Anmeldungen in der Sicherung sind Abgleich und Hardcover sofort wieder verbunden,
+   sonst einmal neu verbinden.
 
 ## 4. Geräte abgleichen (über GitHub)
 Auf **jedem** Gerät einmal einrichten:

@@ -2,16 +2,23 @@
 // die App neu zum Home-Bildschirm hinzufügt (dabei löscht iOS ihre Daten).
 //
 // Enthalten: Bücher (Angaben), Cover, Positionen, Lesezeichen, Markierungen,
-// eigene Bilder, Statistik, Farbschema und andere Einstellungen.
-// NICHT enthalten: die EPUB-/M4B-Dateien und Zugangsschlüssel (GitHub,
-// Hardcover, Dropbox) – die Datei könnte ja in einer Cloud landen.
+// eigene Bilder, Statistik, Gerät, Farbschema, Reader- und Ansichts-Einstellungen.
+// Auf Wunsch (Häkchen) auch die Anmeldungen: GitHub-Abgleich und Hardcover –
+// dann ist nach dem Wiederherstellen sofort alles verbunden.
+// NICHT enthalten: die EPUB-/M4B-Dateien.
 import { dumpStore, putRaw, getBook, listBooks, getProgress } from '../db/db.js'
 
 const STORAGE_KEYS = [
   'lese-app:settings', 'lese-app:highlight-cats',
   'lese-app:stats', 'lese-app:stats-remote', 'lese-app:stats-goal',
-  'lese-app:device', 'lese-app:hc-options', 'lese-app:hc-user',
+  'lese-app:device', 'lese-app:hc-options', 'lese-app:hc-user', 'lese-app:hc-sent',
   'lib-view', 'lib-sort',
+]
+// Anmeldungen (enthalten echte Zugangsschlüssel – nur auf Wunsch)
+const LOGIN_KEYS = [
+  'lese-app:sync', 'lese-app:sync-deleted',      // GitHub-Abgleich (Schlüssel, Gist)
+  'lese-app:hc-auth',                            // Hardcover
+  'lese-app:dropbox-auth', 'lese-app:cloud-folder', 'lese-app:cloud-account',
 ]
 
 const blobToDataUrl = blob => new Promise((res, rej) => {
@@ -22,7 +29,7 @@ const blobToDataUrl = blob => new Promise((res, rej) => {
 })
 const dataUrlToBlob = async url => (await fetch(url)).blob()
 
-export async function createBackup() {
+export async function createBackup({ includeLogins = true } = {}) {
   const [books, covers, progress, bookmarks, highlights, images] = await Promise.all(
     ['books', 'covers', 'progress', 'bookmarks', 'highlights', 'images'].map(dumpStore))
   const data = {
@@ -33,13 +40,18 @@ export async function createBackup() {
     bookmarks: bookmarks.map(([, b]) => b),
     highlights: highlights.map(([, h]) => h),
     images: await Promise.all(images.map(async ([, img]) => ({ ...img, blob: await blobToDataUrl(img.blob) }))),
-    storage: Object.fromEntries(STORAGE_KEYS.map(k => [k, localStorage.getItem(k)]).filter(([, v]) => v != null)),
+    storage: Object.fromEntries([...STORAGE_KEYS, ...(includeLogins ? LOGIN_KEYS : [])]
+      .map(k => [k, localStorage.getItem(k)]).filter(([, v]) => v != null)),
+    hasLogins: includeLogins,
   }
   const json = JSON.stringify(data)
   const date = new Date().toISOString().slice(0, 10)
   return {
     file: new File([json], `Lesezeit-Sicherung-${date}.json`, { type: 'application/json' }),
-    counts: { books: data.books.length, highlights: data.highlights.length, images: data.images.length, bookmarks: data.bookmarks.length },
+    counts: {
+      books: data.books.length, highlights: data.highlights.length, images: data.images.length, bookmarks: data.bookmarks.length,
+      logins: includeLogins ? ['lese-app:sync', 'lese-app:hc-auth'].filter(k => data.storage[k]).length : 0,
+    },
   }
 }
 
