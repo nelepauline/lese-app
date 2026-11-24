@@ -14,6 +14,7 @@ import { useCloudState, download, removeDownload, signIn, clearError, PROVIDER_N
 import EditBook from './EditBook.jsx'
 import ViewPanel from './ViewPanel.jsx'
 import Plant, { seeded } from './Plant.jsx'
+import Cat from './Cat.jsx'
 import { useStats } from '../services/stats.js'
 import { seriesLabel, seriesNumber, bandLabel } from '../services/bookMeta.js'
 
@@ -248,13 +249,19 @@ export default function Library() {
     let i = 0, r = 0
     while (i < list.length) {
       const seed = seeded(`${groupName}:${r}`)
-      const plant = columns >= 3 && seed % 100 < 40
-      const take = plant ? columns - 1 : columns
+      const roll = seed % 100
+      // Etwa jede dritte Reihe eine Pflanze, jede vierte eine Katze; bei breiten
+      // Regalen manchmal beides
+      const deco = []
+      if (columns >= 3 && roll < 35) deco.push({ plant: seed })
+      if (columns >= 3 && (roll >= 60 && roll < 85 || (columns >= 5 && roll < 15))) deco.push({ cat: seed >>> 3 })
+      const take = columns - deco.length
       const items = list.slice(i, i + take).map(b => ({ book: b }))
       i += take
-      if (plant || (items.length < columns && seed % 100 < 85))
-        items.splice(plant ? seed % (items.length + 1) : items.length, 0, { plant: seed })
-      rows.push(items)
+      // Freie Plätze am Ende einer kurzen Reihe gern dekorieren
+      if (!deco.length && items.length < columns) deco.push(roll % 2 ? { cat: seed >>> 3 } : { plant: seed })
+      for (const [k, d] of deco.entries()) items.splice((seed >>> (k * 5)) % (items.length + 1), 0, d)
+      rows.push(items.slice(0, columns))
       r++
     }
     return rows
@@ -269,6 +276,7 @@ export default function Library() {
             <div key={i} className="shelf-row">
               <ul className="shelf-books" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
                 {row.map(item => item.book ? renderShelfBook(item.book)
+                  : item.cat != null ? <li key={'cat' + item.cat} className="shelf-plant"><Cat seed={item.cat} /></li>
                   : <li key={'plant' + item.plant} className="shelf-plant"><Plant seed={item.plant} /></li>)}
               </ul>
               <div className="shelf-board" aria-hidden="true" />
