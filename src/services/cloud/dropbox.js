@@ -82,6 +82,7 @@ export async function handleRedirect() {
   const params = new URLSearchParams(location.search)
   const code = params.get('code'), state = params.get('state'), error = params.get('error')
   if (!code && !error) return false
+  if (state?.startsWith('hc_')) return false // Rückkehr von Hardcover, nicht von Dropbox
   const pending = load(PENDING_KEY)
   save(PENDING_KEY, null)
   // Adresse aufräumen (Code nicht in der Adresszeile lassen)

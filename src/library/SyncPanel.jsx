@@ -3,6 +3,7 @@ import { useState } from 'react'
 import Sheet from '../components/Sheet.jsx'
 import { useSyncState, connect, disconnect, renameDevice, syncNow } from '../services/sync/sync.js'
 import { timeAgo } from '../lib/format.js'
+import { useHardcover, signIn as hcSignIn, signOut as hcSignOut, setOptions as hcSetOptions, clearError as hcClearError } from '../services/hardcover/hardcover.js'
 
 const tokenUrl = name =>
   `https://github.com/settings/tokens/new?scopes=gist&description=${encodeURIComponent(`Lesezeit (${name || 'Gerät'})`)}`
@@ -56,6 +57,7 @@ export default function SyncPanel({ onClose }) {
         <p className="muted small">Auf jedem Gerät einmal einrichten – am einfachsten mit je einem eigenen Schlüssel.
           Der Schlüssel bleibt nur auf diesem Gerät gespeichert und erlaubt ausschließlich Zugriff auf Gists.</p>
       </form>
+      <HardcoverSection />
     </Sheet>
   )
 
@@ -80,6 +82,47 @@ export default function SyncPanel({ onClose }) {
         <p className="muted small">Öffnest du ein Buch, das auf einem anderen Gerät an einer anderen Stelle ist,
           fragt die App, ob du dorthin springen möchtest.</p>
       </div>
+      <HardcoverSection />
     </Sheet>
+  )
+}
+
+// ---- Hardcover ----
+function HardcoverSection() {
+  const hc = useHardcover()
+  return (
+    <div className="settings sync-panel hc-section">
+      <h3 className="hc-title">Hardcover</h3>
+      {!hc.configured ? (
+        <p className="muted small">Die Verbindung zu Hardcover ist vorbereitet, aber die App ist dort noch nicht
+          angemeldet (Client-ID fehlt, siehe Anleitung).</p>
+      ) : !hc.signedIn ? (
+        <>
+          <p>Meldet deinen Lese- und Hörfortschritt an Hardcover und lädt Zitate und Momente in dein
+            Lesetagebuch hoch (nur für Follower sichtbar).</p>
+          <button className="btn btn-primary" onClick={() => hcSignIn().catch(() => {})}>Mit Hardcover anmelden</button>
+        </>
+      ) : (
+        <>
+          <p>✓ Angemeldet{hc.user ? <> als <b>@{hc.user.username}</b></> : ' …'}</p>
+          {hc.lastSent && (
+            <p className={`small ${hc.lastSent.skipped ? 'muted' : ''}`}>
+              Zuletzt: „{hc.lastSent.title}“ – {hc.lastSent.text} · {timeAgo(hc.lastSent.at)}
+            </p>
+          )}
+          <label className="check">
+            <input type="checkbox" checked={hc.options.journal} onChange={e => hcSetOptions({ journal: e.target.checked })} />
+            Zitate und Momente ins Lesetagebuch hochladen
+          </label>
+          <p className="muted small">Fortschritt geht höchstens einmal pro Minute raus – nur für Bücher, die auf
+            Hardcover auf „Lese ich“ stehen. Zitate = Kategorie „Zitate“, Momente = Markierungen mit Reaktion.
+            Sichtbar nur für Leute, die dir folgen.</p>
+          <div className="sync-buttons">
+            <button className="btn" onClick={() => { if (confirm('Von Hardcover abmelden?')) hcSignOut() }}>Abmelden</button>
+          </div>
+        </>
+      )}
+      {hc.error && <p className="notice notice-error" onClick={hcClearError}>{hc.error}</p>}
+    </div>
   )
 }

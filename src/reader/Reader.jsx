@@ -17,6 +17,8 @@ import { SelectionBar, ReactBar } from './HighlightBar.jsx'
 import SyncOffer from '../components/SyncOffer.jsx'
 import { checkForNewerPosition, noteBookmarkDeleted, scheduleSync, useSyncState } from '../services/sync/sync.js'
 import { startTracking } from '../services/stats.js'
+import HardcoverLinkSheet, { HardcoverLinkBanner } from '../components/HardcoverLink.jsx'
+import { useHardcover, needsLink, linkBook, flushBook } from '../services/hardcover/hardcover.js'
 import { useCategories, colorOf, listHighlights, createHighlight, updateHighlight, removeHighlight } from '../services/highlights.js'
 
 export default function Reader({ id }) {
@@ -62,6 +64,8 @@ export default function Reader({ id }) {
   const jumping = useRef(false)
   const sync = useSyncState()
   const tracker = useRef(null)   // Lesezeit
+  const hc = useHardcover()
+  const [hcLink, setHcLink] = useState(false)   // Auswahl-Fenster offen
 
   // ---- Buch laden ----
   useEffect(() => {
@@ -180,6 +184,7 @@ export default function Reader({ id }) {
       offerRef.current = null
       tracker.current?.stop()
       tracker.current = null
+      flushBook(id)
       scheduleSync(1500)
       view?.close()
       view?.remove()
@@ -467,6 +472,15 @@ export default function Reader({ id }) {
         <ReactBar highlight={reactFor} category={categories.find(c => c.id === reactFor.catId)}
           onReact={react} onOpen={() => { setHlSheet({ h: reactFor, note: true }); setReactFor(null) }}
           onClose={() => setReactFor(null)} />
+      )}
+
+      {meta && !offer && needsLink(meta) && hc.user && !hcLink && (
+        <HardcoverLinkBanner onLink={() => setHcLink(true)}
+          onSkip={async () => setMeta({ ...meta, hardcover: await linkBook(id, null) })} />
+      )}
+      {hcLink && meta && (
+        <HardcoverLinkSheet book={meta} onClose={() => setHcLink(false)}
+          onDone={hit => setMeta(m => ({ ...m, hardcover: { bookId: hit.id } }))} />
       )}
 
       {offer && <SyncOffer offer={offer} onJump={() => answerOffer(true)} onStay={() => answerOffer(false)} />}

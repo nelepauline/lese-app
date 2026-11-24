@@ -187,6 +187,11 @@ async function merge(remote, tombs) {
       localChanged = true
     }
 
+    // Hardcover-Verknüpfung: die neuere gewinnt
+    const lh = book.hardcover, rh = entry.hardcover
+    if (lh?.linkedAt && (!rh || lh.linkedAt > rh.linkedAt)) { entry.hardcover = lh; changed = true }
+    else if (rh?.linkedAt && rh.linkedAt > (lh?.linkedAt ?? 0)) { await updateBook(book.id, { hardcover: rh }); localChanged = true }
+
     // Eigenes Cover: die neuere Änderung gewinnt
     const lc = book.coverEditedAt ?? 0, rc = entry.cover?.updatedAt ?? 0
     if (lc > rc) {

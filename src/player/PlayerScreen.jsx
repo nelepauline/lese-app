@@ -14,6 +14,9 @@ import NotebookPanel from '../reader/NotebookPanel.jsx'
 import HighlightSheet from '../reader/HighlightSheet.jsx'
 import { useCategories, listHighlights, createHighlight, removeHighlight } from '../services/highlights.js'
 import { useSyncState } from '../services/sync/sync.js'
+import HardcoverLinkSheet, { HardcoverLinkBanner } from '../components/HardcoverLink.jsx'
+import { useHardcover, needsLink, linkBook, flushBook } from '../services/hardcover/hardcover.js'
+import { getBook } from '../db/db.js'
 
 const RATES = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.75, 2]
 const SLEEP_OPTIONS = [5, 15, 30, 45, 60, 90]
@@ -30,6 +33,11 @@ export default function PlayerScreen({ id }) {
   const [hlSheet, setHlSheet] = useState(null)
   const sync = useSyncState()
   const reloadMarks = () => listHighlights(id).then(setMarks)
+  const hc = useHardcover()
+  const [hcBook, setHcBook] = useState(null)     // aktueller Buch-Eintrag (für die Verknüpfung)
+  const [hcLink, setHcLink] = useState(false)
+  useEffect(() => { getBook(id).then(setHcBook) }, [id, sync.dataVersion])
+  useEffect(() => () => flushBook(id), [id])
   useEffect(() => { reloadMarks() }, [id, sync.dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Anderes Gerät an anderer Stelle? Den lokalen Stand VOR dem Laden merken,
@@ -119,6 +127,14 @@ export default function PlayerScreen({ id }) {
       </header>
 
       {error && <p className="notice notice-error">{error}</p>}
+      {hcBook && !offer && needsLink(hcBook) && hc.user && !hcLink && (
+        <HardcoverLinkBanner onLink={() => setHcLink(true)}
+          onSkip={async () => setHcBook({ ...hcBook, hardcover: await linkBook(id, null) })} />
+      )}
+      {hcLink && hcBook && (
+        <HardcoverLinkSheet book={hcBook} onClose={() => setHcLink(false)}
+          onDone={() => getBook(id).then(setHcBook)} />
+      )}
       {offer && <SyncOffer offer={offer} audio onJump={() => answerOffer(true)} onStay={() => answerOffer(false)} />}
 
       {book && (

@@ -132,6 +132,23 @@ einem anderen Gerät an einer anderen Stelle ist, fragt die App, ob du dorthin s
 
 ---
 
+## Hardcover (Fortschritt, Zitate, Momente)
+Lesezeit meldet deinen Fortschritt an [Hardcover](https://hardcover.app) – höchstens einmal pro
+Minute und beim Schließen eines Buchs, **nur für Bücher, die dort auf „Lese ich“ stehen**.
+Zitate (Kategorie „Zitate“) und Momente (Markierungen mit Reaktion) landen im Lesetagebuch,
+sichtbar nur für Follower. Ändern oder Löschen der Markierung ändert bzw. löscht auch den Eintrag.
+
+**Einmalig einrichten (Developer App):**
+1. https://hardcover.app/account/developer-apps/new öffnen.
+2. Application Type: **Single-page app**, Name: z. B. „Lesezeit“.
+3. OAuth Redirect URI: `https://nelepauline.github.io/lese-app/`
+   (zum Testen am Mac zusätzlich `http://localhost/`).
+4. Scopes: `read:me:content`, `read:catalog`, `read:library`, `write:library`.
+5. Die **Client ID** in `src/config.js` bei `HARDCOVER_CLIENT_ID` eintragen (nicht geheim).
+
+Danach in der App: Pfeil-Symbol → „Mit Hardcover anmelden“. Beim ersten Öffnen eines Buchs
+schlägt die App das passende Hardcover-Buch vor; ändern/lösen geht unter „…“ → Buch bearbeiten.
+
 ## 5. Dropbox-Ordner als Bibliothek
 In der Bibliothek auf das **Wolken-Symbol** tippen → **Mit Dropbox anmelden** → Ordner auswählen.
 Alle EPUBs und M4B-Hörbücher darin (auch in Unterordnern) erscheinen in der Bibliothek, mit

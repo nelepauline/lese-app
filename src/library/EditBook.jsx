@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import Sheet from '../components/Sheet.jsx'
 import Cover from '../components/Cover.jsx'
 import { saveBookMeta } from '../services/bookMeta.js'
+import HardcoverLinkSheet from '../components/HardcoverLink.jsx'
+import { useHardcover, linkOf, unlinkBook } from '../services/hardcover/hardcover.js'
 
 export default function EditBook({ book, allSeries, allAuthors, cloudName, onClose, onSaved, onDelete, onRemoveDownload }) {
   const [form, setForm] = useState({
@@ -17,6 +19,10 @@ export default function EditBook({ book, allSeries, allAuthors, cloudName, onClo
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const coverInput = useRef()
+  const hc = useHardcover()
+  const [hcLink, setHcLink] = useState(book.hardcover)
+  const [linking, setLinking] = useState(false)
+  const link = linkOf({ hardcover: hcLink })
 
   useEffect(() => () => { if (coverPreview) URL.revokeObjectURL(coverPreview) }, [coverPreview])
 
@@ -94,6 +100,17 @@ export default function EditBook({ book, allSeries, allAuthors, cloudName, onClo
         <p className="muted small">Geändert wird nur die Anzeige in Lesezeit, die Datei selbst bleibt unverändert.
           Mit dem Geräte-Abgleich erscheinen die Änderungen auch auf deinen anderen Geräten.</p>
 
+        {hc.signedIn && (
+          <>
+            <label>Hardcover</label>
+            <div className="hc-row">
+              <span className="small">{link ? <>Verknüpft mit <b>{link.title}</b>{link.authors ? ` (${link.authors})` : ''}</> : 'Nicht verknüpft'}</span>
+              <button type="button" className="btn small" onClick={() => setLinking(true)}>{link ? 'Ändern' : 'Verknüpfen'}</button>
+              {link && <button type="button" className="btn small" onClick={async () => { await unlinkBook(book.id); setHcLink({ removed: true }) }}>Lösen</button>}
+            </div>
+          </>
+        )}
+
         <div className="edit-danger">
           {book.remote && book.fileStored !== false && (
             <button type="button" className="btn" onClick={() => onRemoveDownload(book)}>Download entfernen</button>
@@ -104,6 +121,10 @@ export default function EditBook({ book, allSeries, allAuthors, cloudName, onClo
           {book.remote && <p className="muted small">Das Buch liegt in {cloudName}.</p>}
         </div>
       </form>
+      {linking && (
+        <HardcoverLinkSheet book={book} onClose={() => setLinking(false)}
+          onDone={hit => setHcLink({ bookId: hit.id, title: hit.title, authors: hit.authors })} />
+      )}
     </Sheet>
   )
 }

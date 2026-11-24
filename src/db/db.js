@@ -154,6 +154,9 @@ export async function listHighlights(bookId) {
   const list = await (await db()).getAllFromIndex('highlights', 'bookId', bookId)
   return list.sort((a, b) => (a.fraction ?? 0) - (b.fraction ?? 0))
 }
+export async function getHighlight(id) {
+  return (await db()).get('highlights', id)
+}
 export async function putHighlight(h) {
   return (await db()).put('highlights', h)
 }

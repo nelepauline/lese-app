@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import { listHighlights, putHighlight, deleteHighlight as dbDelete, newId } from '../db/db.js'
 import { noteDeleted, scheduleSync } from './sync/sync.js'
+import { highlightChanged, highlightRemoved } from './hardcover/hardcover.js'
 
 // Pastellfarben zur Auswahl. "mark" ist die Farbe im Buch (wird halbtransparent
 // über den Text gelegt), "chip" die kräftigere Variante für Punkte und Schildchen.
@@ -86,6 +87,7 @@ export async function createHighlight(data) {
   const h = { id: newId(), reaction: '', note: '', ...data, createdAt: now, updatedAt: now }
   await putHighlight(h)
   scheduleSync(3000)
+  highlightChanged(h)
   return h
 }
 
@@ -93,12 +95,14 @@ export async function updateHighlight(h, changes) {
   const next = { ...h, ...changes, updatedAt: Date.now() }
   await putHighlight(next)
   scheduleSync(3000)
+  highlightChanged(next)
   return next
 }
 
 export async function removeHighlight(h) {
   await dbDelete(h.id)
   noteDeleted(h.id)
+  highlightRemoved(h)
 }
 
 // "Anna," / "anna" / "Anna’s" → gleiche Gruppe

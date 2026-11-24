@@ -30,6 +30,17 @@ export function readSeries(metadata) {
   return { series, seriesIndex }
 }
 
+// ISBN aus den Kennungen der EPUB (z. B. "urn:isbn:978…") – hilft beim Finden auf Hardcover
+export function readIsbn(metadata) {
+  const ids = [metadata?.identifier, ...(metadata?.altIdentifier ?? [])]
+    .map(x => typeof x === 'string' ? x : x?.value).filter(Boolean)
+  for (const id of ids) {
+    const digits = String(id).replace(/^urn:isbn:/i, '').replace(/[^0-9Xx]/g, '')
+    if (/^97[89]\d{10}$/.test(digits) || (/isbn/i.test(id) && /^\d{9}[\dXx]$/.test(digits))) return digits.toUpperCase()
+  }
+  return ''
+}
+
 export async function readEpubInfo(file) {
   const book = await makeBook(file)
   const cover = await Promise.resolve(book.getCover?.()).catch(() => null)
@@ -38,6 +49,7 @@ export async function readEpubInfo(file) {
     author: formatAuthor(book.metadata?.author),
     language: book.metadata?.language ?? '',
     ...readSeries(book.metadata),
+    isbn: readIsbn(book.metadata),
     // Vorbereitung Etappe 1: EPUB 3 mit Media Overlays (z. B. von Storyteller)
     hasMediaOverlay: book.sections?.some(s => s.mediaOverlay) ?? false,
     cover: cover ?? null,
