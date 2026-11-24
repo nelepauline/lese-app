@@ -298,10 +298,14 @@ export async function initHardcover() {
   if (hardcoverReady() || state.signedIn) ensureUser().catch(fail)
 }
 
-// Wird beim Schließen eines Buchs aufgerufen: offenen Fortschritt sofort senden
-export function flushBook(bookId) {
+// Buch verlassen (zurück zur Bibliothek, App in den Hintergrund, Hörbuch
+// pausiert): sofort senden – ohne auf die Minuten-Regel zu warten.
+// Unveränderter Fortschritt wird dabei nicht doppelt geschickt.
+export function pushNow(bookId) {
   const t = timers.get(bookId)
-  if (t) { clearTimeout(t); timers.delete(bookId); pushProgress(bookId).catch(fail) }
+  if (t) { clearTimeout(t); timers.delete(bookId) }
+  return pushProgress(bookId).catch(fail)
 }
+export const flushBook = pushNow
 
 export const clearError = () => setState({ error: null })

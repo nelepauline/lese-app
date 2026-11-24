@@ -15,7 +15,7 @@ import HighlightSheet from '../reader/HighlightSheet.jsx'
 import { useCategories, listHighlights, createHighlight, removeHighlight } from '../services/highlights.js'
 import { useSyncState } from '../services/sync/sync.js'
 import HardcoverLinkSheet, { HardcoverLinkBanner } from '../components/HardcoverLink.jsx'
-import { useHardcover, needsLink, linkBook, flushBook } from '../services/hardcover/hardcover.js'
+import { useHardcover, needsLink, linkBook, pushNow } from '../services/hardcover/hardcover.js'
 import { getBook } from '../db/db.js'
 
 const RATES = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.5, 1.75, 2]
@@ -37,7 +37,7 @@ export default function PlayerScreen({ id }) {
   const [hcBook, setHcBook] = useState(null)     // aktueller Buch-Eintrag (für die Verknüpfung)
   const [hcLink, setHcLink] = useState(false)
   useEffect(() => { getBook(id).then(setHcBook) }, [id, sync.dataVersion])
-  useEffect(() => () => flushBook(id), [id])
+  useEffect(() => () => { pushNow(id) }, [id])  // Player verlassen → sofort an Hardcover
   useEffect(() => { reloadMarks() }, [id, sync.dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Anderes Gerät an anderer Stelle? Den lokalen Stand VOR dem Laden merken,

@@ -6,6 +6,7 @@ import { saveProgress, getProgress } from '../services/progress.js'
 import { getSettings, updateSettings } from '../settings/settings.js'
 import * as session from './mediaSession.js'
 import { startTracking } from '../services/stats.js'
+import { pushNow } from '../services/hardcover/hardcover.js'
 
 const AudioCtx = createContext(null)      // Buch, Steuerfunktionen (ändert sich selten)
 const TimeCtx = createContext(null)       // Position (ändert sich ständig)
@@ -59,12 +60,12 @@ export function AudioProvider({ children }) {
     const a = audioRef.current, b = bookRef.current
     if (!a || !b || !isFinite(a.duration) || !a.duration) return
     const idx = chapterIndexAt(b.chapters ?? [], a.currentTime)
-    saveProgress(b.id, {
+    lastSave.current = Date.now()
+    return saveProgress(b.id, {
       position: a.currentTime,
       fraction: a.currentTime / a.duration,
       chapter: b.chapters?.[idx]?.title ?? '',
     })
-    lastSave.current = Date.now()
   }, [])
 
   // ---- Hörbuch laden ----
@@ -173,7 +174,12 @@ export function AudioProvider({ children }) {
       }
     }
     const onPlay = () => { setPlaying(true); session.setPlaybackState(true); session.setPosition(a) }
-    const onPause = () => { setPlaying(false); session.setPlaybackState(false); persist() }
+    // Pause → Position speichern und sofort an Hardcover (ohne Minuten-Regel)
+    const onPause = () => {
+      setPlaying(false); session.setPlaybackState(false)
+      const id = bookRef.current?.id
+      Promise.resolve(persist()).then(() => id && pushNow(id))
+    }
     const onEnded = () => { onPause(); setSleep(null) }
     const onPos = () => session.setPosition(a)
     const onSeeked = () => {

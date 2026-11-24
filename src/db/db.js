@@ -176,6 +176,18 @@ export async function deleteImage(id) {
   return (await db()).delete('images', id)
 }
 
+// ---- Für die Datensicherung: ganze Tabellen lesen ----
+// Liefert [[schlüssel, wert], …]
+export async function dumpStore(name) {
+  const d = await db()
+  const [keys, values] = await Promise.all([d.getAllKeys(name), d.getAll(name)])
+  return keys.map((k, i) => [k, values[i]])
+}
+export async function putRaw(name, value, key) {
+  const d = await db()
+  return key === undefined ? d.put(name, value) : d.put(name, value, key)
+}
+
 // Bittet den Browser, die Daten nicht automatisch zu löschen,
 // wenn der Speicher knapp wird (wichtig für Safari).
 export async function requestPersistentStorage() {

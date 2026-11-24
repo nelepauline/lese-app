@@ -18,7 +18,7 @@ import SyncOffer from '../components/SyncOffer.jsx'
 import { checkForNewerPosition, noteBookmarkDeleted, scheduleSync, useSyncState } from '../services/sync/sync.js'
 import { startTracking } from '../services/stats.js'
 import HardcoverLinkSheet, { HardcoverLinkBanner } from '../components/HardcoverLink.jsx'
-import { useHardcover, needsLink, linkBook, flushBook } from '../services/hardcover/hardcover.js'
+import { useHardcover, needsLink, linkBook, pushNow } from '../services/hardcover/hardcover.js'
 import { useCategories, colorOf, listHighlights, createHighlight, updateHighlight, removeHighlight } from '../services/highlights.js'
 
 export default function Reader({ id }) {
@@ -72,6 +72,16 @@ export default function Reader({ id }) {
     let alive = true
     let view
     let saveTimer
+    let pendingSave = null   // noch nicht gespeicherte Position
+    // Offene Position sofort speichern und an Hardcover senden
+    const leave = async () => {
+      clearTimeout(saveTimer)
+      if (pendingSave) { const p = pendingSave; pendingSave = null; await saveProgress(id, p) }
+      pushNow(id)
+    }
+    const onHide = () => { if (document.visibilityState === 'hidden') leave() }
+    document.addEventListener('visibilitychange', onHide)
+    addEventListener('pagehide', leave)
 
     async function open() {
       const [book, blob, progress] = await Promise.all([getBook(id), getFile(id), getProgress(id)])
@@ -151,9 +161,8 @@ export default function Reader({ id }) {
         tracker.current?.activity()
         // Fortschritt speichern (gebündelt, nicht bei jedem Scrollschritt)
         clearTimeout(saveTimer)
-        saveTimer = setTimeout(() => saveProgress(id, {
-          fraction: next.fraction, cfi: next.cfi, chapter: next.chapter,
-        }), 800)
+        pendingSave = { fraction: next.fraction, cfi: next.cfi, chapter: next.chapter }
+        saveTimer = setTimeout(() => { const p = pendingSave; pendingSave = null; if (p) saveProgress(id, p) }, 800)
       })
 
       view.addEventListener('load', e => attachPageHandlers(e.detail.doc))
@@ -179,12 +188,13 @@ export default function Reader({ id }) {
 
     return () => {
       alive = false
-      clearTimeout(saveTimer)
+      document.removeEventListener('visibilitychange', onHide)
+      removeEventListener('pagehide', leave)
       offerRef.current?.release()
       offerRef.current = null
       tracker.current?.stop()
       tracker.current = null
-      flushBook(id)
+      leave()  // Buch verlassen → Position speichern und sofort an Hardcover
       scheduleSync(1500)
       view?.close()
       view?.remove()

@@ -1,7 +1,7 @@
 // Bibliothek: alle Bücher und Hörbücher mit Cover, Titel, Autor und Fortschritt.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { listBooks, getAllProgress, deleteBook } from '../db/db.js'
-import { importFile } from '../services/importer.js'
+import { importFile, isMissingFile, attachFile, analyzeFile } from '../services/importer.js'
 import { navigate } from '../lib/router.js'
 import { percent, fileSize } from '../lib/format.js'
 import { useAudio } from '../player/AudioProvider.jsx'
@@ -59,6 +59,8 @@ export default function Library() {
   const [busy, setBusy] = useState(null)
   const [message, setMessage] = useState(null)
   const fileInput = useRef()
+  const attachInput = useRef()          // Datei für ein Buch ohne Datei auswählen
+  const [attachFor, setAttachFor] = useState(null)
   const audio = useAudio()
   const sync = useSyncState()
   const [showSync, setShowSync] = useState(false)
@@ -108,12 +110,13 @@ export default function Library() {
     const files = [...e.target.files]
     e.target.value = ''
     const errors = []
-    let added = 0
+    let added = 0, reattached = 0
     for (const [i, file] of files.entries()) {
       setBusy(files.length > 1 ? `Importiere ${i + 1} von ${files.length} …` : `Importiere „${file.name}“ …`)
       try {
-        const { duplicate } = await importFile(file)
-        if (!duplicate) added++
+        const { duplicate, attached } = await importFile(file)
+        if (attached) reattached++
+        else if (!duplicate) added++
       } catch (err) {
         console.error(err)
         errors.push(err.message || String(err))
@@ -122,6 +125,7 @@ export default function Library() {
     setBusy(null)
     await refresh()
     if (errors.length) setMessage(errors.join('\n'))
+    else if (reattached && !added) setMessage(reattached === 1 ? 'Datei zugeordnet – das Buch ist wieder lesbar.' : `${reattached} Dateien zugeordnet – die Bücher sind wieder lesbar.`)
     else if (!added) setMessage('Diese Datei ist schon in der Bibliothek.')
   }
 
@@ -140,7 +144,33 @@ export default function Library() {
     setEditing(null)
   }
 
+  // Buch ohne Datei: Datei auswählen und anhängen
+  async function onAttach(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    const book = attachFor
+    setAttachFor(null)
+    if (!file || !book) return
+    setBusy(`Ordne „${file.name}“ zu …`)
+    try {
+      const analyzed = await analyzeFile(file)
+      if (book.syncKey && analyzed.syncKey !== book.syncKey &&
+        !confirm(`Diese Datei scheint nicht „${book.title}“ zu sein. Trotzdem verwenden?`)) return
+      await attachFile(book, file, analyzed)
+    } catch (err) {
+      setMessage(err.message || String(err))
+    } finally {
+      setBusy(null)
+      refresh()
+    }
+  }
+
   async function open(book) {
+    if (isMissingFile(book)) {
+      setAttachFor(book)
+      attachInput.current.click()
+      return
+    }
     if (book.fileStored === false) {
       try { await download(book) } catch { return }
       book = { ...book, fileStored: true }
@@ -172,16 +202,18 @@ export default function Library() {
   function renderBook(book) {
     const p = progress[book.id]
     const f = p?.fraction ?? 0
-    const inCloud = book.fileStored === false
+    const missing = isMissingFile(book)
+    const inCloud = book.fileStored === false && !missing
     const dl = cloud.downloads[book.id]
     const series = sort === 'series' ? bandLabel(book) : seriesLabel(book)
     return (
-      <li key={book.id} className={`book-card ${inCloud ? 'in-cloud' : ''}`}>
+      <li key={book.id} className={`book-card ${inCloud || missing ? 'in-cloud' : ''}`}>
         <button className="book-open" onClick={() => open(book)} disabled={dl != null}>
           <div className="cover-wrap">
             <Cover book={book} />
             {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
             {inCloud && dl == null && <span className="badge badge-left" title={`In ${PROVIDER_NAME} – zum Herunterladen tippen`}><Icon name="cloud" size={14} /></span>}
+            {missing && <span className="missing-badge">Datei fehlt</span>}
             {dl != null && (
               <div className="download-overlay">
                 <div className="download-ring" style={{ '--p': dl }} />
@@ -194,7 +226,13 @@ export default function Library() {
           {book.author && <div className="book-author">{book.author}</div>}
         </button>
         <div className="book-meta">
-          {inCloud ? (
+          {missing ? (
+            <>
+              <span className="book-percent cloud-size">{p ? `${percent(f)} · ` : ''}Datei fehlt</span>
+              <button className="icon-btn small" onClick={() => open(book)}
+                aria-label="Datei auswählen" title="Datei auswählen"><Icon name="plus" size={16} /></button>
+            </>
+          ) : inCloud ? (
             <>
               <span className="book-percent cloud-size">{p ? `${percent(f)} · ` : ''}{fileSize(book.size)}</span>
               <button className="icon-btn small" onClick={() => open(book)} disabled={dl != null}
@@ -217,6 +255,7 @@ export default function Library() {
   function renderShelfBook(book) {
     const p = progress[book.id]
     const f = p?.fraction ?? 0
+    const missing = isMissingFile(book)
     const inCloud = book.fileStored === false
     const dl = cloud.downloads[book.id]
     return (
@@ -226,7 +265,8 @@ export default function Library() {
           <div className="cover-wrap">
             <Cover book={book} />
             {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
-            {inCloud && dl == null && <span className="badge badge-left"><Icon name="cloud" size={14} /></span>}
+            {inCloud && dl == null && !missing && <span className="badge badge-left"><Icon name="cloud" size={14} /></span>}
+            {missing && <span className="missing-badge">Datei fehlt</span>}
             {f > 0 && !inCloud && <div className="shelf-progress"><span style={{ width: `${f * 100}%` }} /></div>}
             {dl != null && (
               <div className="download-overlay">
@@ -316,6 +356,7 @@ export default function Library() {
         </div>
         {/* kein "accept"-Filter: iOS erkennt .m4b sonst teils nicht */}
         <input ref={fileInput} type="file" multiple hidden onChange={onFiles} />
+        <input ref={attachInput} type="file" hidden onChange={onAttach} />
       </header>
 
       {books?.length > 0 && (

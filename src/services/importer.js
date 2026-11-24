@@ -1,6 +1,6 @@
 // Importiert Dateien aus der Dateiauswahl in die lokale Bibliothek.
 // Cloud-Bücher (services/cloud) nutzen analyzeFile() nach dem Herunterladen.
-import { addBook, listBooks, newId, requestPersistentStorage } from '../db/db.js'
+import { addBook, listBooks, newId, requestPersistentStorage, storeDownload, getCover } from '../db/db.js'
 import { isZip, readEpubInfo } from '../formats/epub/epubInfo.js'
 import { isMp4, readAudiobookInfo } from '../formats/m4b/mp4.js'
 import { fingerprint } from './sync/fingerprint.js'
@@ -47,12 +47,31 @@ export async function analyzeFile(file) {
 /**
  * Importiert eine Datei. Gibt das neue Buch zurück oder wirft einen Fehler.
  */
+// Buch ohne Datei (z. B. nach dem Wiederherstellen einer Sicherung)?
+export const isMissingFile = b => b.fileStored === false && !b.remote
+
+// Datei an ein vorhandenes Buch ohne Datei hängen. Selbst bearbeitete
+// Angaben (Titel, Serie …) und das Cover bleiben erhalten.
+export async function attachFile(book, file, analyzed) {
+  const { type, blob, cover, syncKey } = analyzed ?? await analyzeFile(file)
+  const hasCover = !!(await getCover(book.id))
+  const updated = { ...book, type, fileName: file.name, size: file.size, syncKey: book.syncKey || syncKey, fileStored: true, source: 'local' }
+  await storeDownload(updated, blob, hasCover ? null : cover)
+  requestPersistentStorage()
+  return updated
+}
+
 export async function importFile(file) {
   const existing = await listBooks()
   const dup = existing.find(b => b.fileName === file.name && b.size === file.size)
-  if (dup) return { book: dup, duplicate: true }
+  if (dup && !isMissingFile(dup)) return { book: dup, duplicate: true }
+  if (dup) return { book: await attachFile(dup, file), attached: true }
 
-  const { type, meta, blob, cover, syncKey } = await analyzeFile(file)
+  const analyzed = await analyzeFile(file)
+  const { type, meta, blob, cover, syncKey } = analyzed
+  // Gehört die Datei zu einem Buch, dessen Datei fehlt? (gleicher Fingerabdruck)
+  const match = existing.find(b => isMissingFile(b) && b.syncKey && b.syncKey === syncKey)
+  if (match) return { book: await attachFile(match, file, analyzed), attached: true }
   const book = {
     id: newId(),
     type,

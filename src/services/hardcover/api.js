@@ -52,6 +52,7 @@ async function tokenRequest(fields) {
   try {
     res = await fetch(`${HARDCOVER_API}/oauth2/token`, {
       method: 'POST',
+      keepalive: true, // läuft weiter, auch wenn die App gerade in den Hintergrund geht
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: HARDCOVER_CLIENT_ID, ...fields }),
     })
@@ -121,6 +122,7 @@ export async function gql(query, variables = {}, retry = true) {
   try {
     res = await fetch(`${HARDCOVER_API}/v1/graphql`, {
       method: 'POST',
+      keepalive: true, // läuft weiter, auch wenn die App gerade in den Hintergrund geht
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ query, variables }),
     })

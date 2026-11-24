@@ -111,6 +111,18 @@ Das Flammen-Symbol in der Bibliothek zeigt den Streak und öffnet die Übersicht
 letzte 7 Tage, Kalender, Lese- und Hörzeit, meistgelesene Bücher. Lesen zählt, solange
 geblättert oder gescrollt wird, Hören, solange das Hörbuch läuft.
 
+## Datensicherung (z. B. für ein neues App-Icon)
+iOS übernimmt ein neues App-Icon erst, wenn man die App neu zum Home-Bildschirm hinzufügt –
+und löscht dabei ihre Daten. Deshalb vorher sichern:
+1. Pfeil-Symbol → **Datensicherung** → „Sicherung erstellen“ → im Teilen-Menü „In Dateien sichern“.
+   Enthalten: Bücher-Angaben, Cover, Positionen, Lesezeichen, Markierungen, Notizen, Bilder,
+   Statistik, Einstellungen. Nicht enthalten: die Buchdateien und Anmeldungen.
+2. App vom Home-Bildschirm löschen, Seite in Safari öffnen, neu „Zum Home-Bildschirm“.
+3. Pfeil-Symbol → „Wiederherstellen“ → die Sicherungsdatei wählen.
+4. Bücher zeigen „Datei fehlt“: über „Hinzufügen“ die Dateien wieder auswählen (auch mehrere
+   auf einmal) – sie werden automatisch dem richtigen Buch zugeordnet. Oder auf ein Buch tippen.
+5. GitHub-Abgleich und Hardcover neu verbinden.
+
 ## 4. Geräte abgleichen (über GitHub)
 Auf **jedem** Gerät einmal einrichten:
 1. In der Bibliothek oben auf das **Pfeil-Symbol** (zwei Pfeile im Kreis) tippen.
@@ -133,8 +145,9 @@ einem anderen Gerät an einer anderen Stelle ist, fragt die App, ob du dorthin s
 ---
 
 ## Hardcover (Fortschritt, Zitate, Momente)
-Lesezeit meldet deinen Fortschritt an [Hardcover](https://hardcover.app) – höchstens einmal pro
-Minute und beim Schließen eines Buchs, **nur für Bücher, die dort auf „Lese ich“ stehen**.
+Lesezeit meldet deinen Fortschritt an [Hardcover](https://hardcover.app) – während des Lesens
+höchstens einmal pro Minute und **sofort, wenn du ein Buch verlässt, die App in den Hintergrund
+geht oder ein Hörbuch pausierst**, **nur für Bücher, die dort auf „Lese ich“ stehen**.
 Zitate (Kategorie „Zitate“) und Momente (Markierungen mit Reaktion) landen im Lesetagebuch,
 sichtbar nur für Follower. Ändern oder Löschen der Markierung ändert bzw. löscht auch den Eintrag.
 

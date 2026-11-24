@@ -1,8 +1,9 @@
 // Einstellungen für den Abgleich zwischen Geräten (über GitHub)
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Sheet from '../components/Sheet.jsx'
 import { useSyncState, connect, disconnect, renameDevice, syncNow } from '../services/sync/sync.js'
 import { timeAgo } from '../lib/format.js'
+import { createBackup, saveFile, readBackup, restoreBackup } from '../services/backup.js'
 import { useHardcover, signIn as hcSignIn, signOut as hcSignOut, setOptions as hcSetOptions, clearError as hcClearError, pushLatestNow } from '../services/hardcover/hardcover.js'
 
 const tokenUrl = name =>
@@ -58,6 +59,7 @@ export default function SyncPanel({ onClose }) {
           Der Schlüssel bleibt nur auf diesem Gerät gespeichert und erlaubt ausschließlich Zugriff auf Gists.</p>
       </form>
       <HardcoverSection />
+      <BackupSection />
     </Sheet>
   )
 
@@ -83,6 +85,7 @@ export default function SyncPanel({ onClose }) {
           fragt die App, ob du dorthin springen möchtest.</p>
       </div>
       <HardcoverSection />
+      <BackupSection />
     </Sheet>
   )
 }
@@ -128,6 +131,58 @@ function HardcoverSection() {
         </>
       )}
       {hc.error && <p className="notice notice-error" onClick={hcClearError}>{hc.error}</p>}
+    </div>
+  )
+}
+
+// ---- Datensicherung ----
+function BackupSection() {
+  const [busy, setBusy] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const input = useRef()
+
+  async function onSave() {
+    setBusy('Erstelle Sicherung …'); setMsg(null)
+    try {
+      const { file, counts } = await createBackup()
+      const how = await saveFile(file)
+      if (how !== 'aborted') setMsg({ ok: true, text: `Sicherung erstellt: ${counts.books} Bücher, ${counts.highlights} Markierungen, ${counts.images} Bilder (${Math.max(1, Math.round(file.size / 1024))} KB).` })
+    } catch (err) {
+      setMsg({ ok: false, text: err.message || String(err) })
+    } finally { setBusy(null) }
+  }
+
+  async function onRestore(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setMsg(null)
+    try {
+      const data = await readBackup(file)
+      const when = new Date(data.createdAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+      if (!confirm(`Sicherung vom ${when} wiederherstellen (${data.books?.length ?? 0} Bücher)? Vorhandenes wird ergänzt, nichts wird gelöscht.`)) return
+      setBusy('Stelle wieder her …')
+      const r = await restoreBackup(data)
+      alert(`Fertig: ${r.added} Bücher hinzugefügt, ${r.merged} ergänzt. Bücher mit „Datei fehlt“: Datei einfach über „Hinzufügen“ wieder auswählen – sie wird automatisch zugeordnet.`)
+      location.reload()
+    } catch (err) {
+      setMsg({ ok: false, text: err.message || String(err) })
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="settings sync-panel hc-section">
+      <h3 className="hc-title">Datensicherung</h3>
+      <p className="muted small">Sichert Positionen, Markierungen, Notizen, Bilder, Statistik und Einstellungen in eine Datei
+        (ohne die Buchdateien und ohne Anmeldungen). Praktisch, bevor du die App neu zum Home-Bildschirm hinzufügst.</p>
+      <div className="sync-buttons">
+        <button className="btn" onClick={onSave} disabled={!!busy}>Sicherung erstellen</button>
+        <button className="btn" onClick={() => input.current.click()} disabled={!!busy}>Wiederherstellen</button>
+      </div>
+      <input ref={input} type="file" accept="application/json,.json" hidden onChange={onRestore} />
+      {busy && <p className="muted small">{busy}</p>}
+      {msg && <p className={msg.ok ? 'small' : 'notice notice-error'}>{msg.text}</p>}
     </div>
   )
 }
