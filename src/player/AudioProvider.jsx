@@ -5,6 +5,7 @@ import { getBook, getFile, getCover, updateBook } from '../db/db.js'
 import { saveProgress, getProgress } from '../services/progress.js'
 import { getSettings, updateSettings } from '../settings/settings.js'
 import * as session from './mediaSession.js'
+import { startTracking } from '../services/stats.js'
 
 const AudioCtx = createContext(null)      // Buch, Steuerfunktionen (ändert sich selten)
 const TimeCtx = createContext(null)       // Position (ändert sich ständig)
@@ -37,6 +38,13 @@ export function AudioProvider({ children }) {
   const loadingRef = useRef(null)
 
   const chapters = useMemo(() => book?.chapters ?? [], [book])
+
+  // Hörzeit zählen, solange ein Hörbuch geladen ist und läuft
+  useEffect(() => {
+    if (!book) return
+    const t = startTracking('listen', book, () => audioRef.current && !audioRef.current.paused)
+    return () => t.stop()
+  }, [book?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Endzeit (Sekunden) des Kapitels, das gerade läuft
   const currentChapterEnd = useCallback(() => {

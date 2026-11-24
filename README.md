@@ -86,6 +86,22 @@ stehen die Bände einer Serie der Reihe nach unter einer Überschrift. Löschen 
 Neben „Sortieren“ öffnet das Symbol rechts die **Ansicht**: Raster, Liste oder Regal
 (Cover auf Regalbrettern) und die Cover-Größe (Klein, Mittel, Groß).
 
+## Markieren, Notizbuch und Bilder
+- **Markieren:** Im Buch Text auswählen (lange drücken und ziehen) → unten eine Kategorie
+  antippen (z. B. Personen, Orte, Lore & Wissen, Zitate). Danach kann man gleich eine
+  Reaktion vergeben (😢 😮 🤯 😍 😂 😠) oder eine Notiz schreiben.
+- Tippen auf eine Markierung öffnet sie: Kategorie ändern, Reaktion, Notiz, „Im Buch suchen“, löschen.
+- **Notizbuch** (Symbol oben im Reader): alle Markierungen nach Kategorie. Bei Personen und
+  Orten werden gleiche Namen zusammengefasst, mit allen Stellen. Außerdem Lesezeichen und
+  **Bilder** (z. B. eine Karte) mit Zoom.
+- **Kategorien** lassen sich im Notizbuch anlegen, umbenennen, umfärben und sortieren.
+- Nach einem Sprung (Link, Inhaltsverzeichnis, Suche) erscheint unten links **„Zurück“**.
+
+## Übersicht und Streak
+Das Flammen-Symbol in der Bibliothek zeigt den Streak und öffnet die Übersicht: Tagesziel,
+letzte 7 Tage, Kalender, Lese- und Hörzeit, meistgelesene Bücher. Lesen zählt, solange
+geblättert oder gescrollt wird, Hören, solange das Hörbuch läuft.
+
 ## 4. Geräte abgleichen (über GitHub)
 Auf **jedem** Gerät einmal einrichten:
 1. In der Bibliothek oben auf das **Pfeil-Symbol** (zwei Pfeile im Kreis) tippen.
@@ -94,14 +110,15 @@ Auf **jedem** Gerät einmal einrichten:
    → den Schlüssel (beginnt mit `ghp_`) kopieren.
 4. Zurück in die App, Schlüssel einfügen, **Verbinden**.
 
-Danach werden Positionen, Lesezeichen und selbst bearbeitete Buch-Angaben (Titel, Autor/in,
-Serie, Band, eigenes Cover) automatisch abgeglichen. Öffnest du ein Buch, das auf
+Danach werden Positionen, Lesezeichen, Markierungen mit Notizen, Bilder, Kategorien,
+Lesezeit/Streak und selbst bearbeitete Buch-Angaben (Titel, Autor/in, Serie, Band,
+eigenes Cover) automatisch abgeglichen. Öffnest du ein Buch, das auf
 einem anderen Gerät an einer anderen Stelle ist, fragt die App, ob du dorthin springen möchtest.
 
 - Gespeichert wird in einem privaten Gist in deinem GitHub-Konto
   („Lesezeit – Synchronisation“, bitte nicht löschen). Die Bücher selbst werden **nicht** hochgeladen.
 - Dasselbe Buch wird auf allen Geräten an der Datei erkannt – also überall dieselbe Datei verwenden.
-- Eigene Cover liegen in einem zweiten privaten Gist („Lesezeit – eigene Cover“).
+- Eigene Cover und Bilder liegen in einem zweiten privaten Gist („Lesezeit – eigene Cover“).
 - Schlüssel verloren oder abgelaufen? Einfach einen neuen erstellen und neu verbinden.
 
 ---

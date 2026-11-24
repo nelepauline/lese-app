@@ -1,11 +1,10 @@
-// Liste der Lesezeichen
-import Sheet from '../components/Sheet.jsx'
+// Liste der Lesezeichen (im Notizbuch als eigener Reiter)
 import Icon from '../components/Icon.jsx'
 import { percent } from '../lib/format.js'
 
-export default function BookmarksPanel({ bookmarks, onSelect, onDelete, onClose }) {
+export function BookmarkList({ bookmarks, onSelect, onDelete }) {
   return (
-    <Sheet title="Lesezeichen" onClose={onClose}>
+    <>
       {!bookmarks.length && (
         <p className="muted pad">Noch keine Lesezeichen. Tippe oben rechts auf der Seite auf das
           Lesezeichen-Symbol, um die aktuelle Stelle zu merken.</p>
@@ -23,6 +22,6 @@ export default function BookmarksPanel({ bookmarks, onSelect, onDelete, onClose 
           </li>
         ))}
       </ul>
-    </Sheet>
+    </>
   )
 }

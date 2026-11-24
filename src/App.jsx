@@ -8,6 +8,7 @@ import Library from './library/Library.jsx'
 import Reader from './reader/Reader.jsx'
 import PlayerScreen from './player/PlayerScreen.jsx'
 import MiniPlayer from './player/MiniPlayer.jsx'
+import StatsScreen from './stats/StatsScreen.jsx'
 
 export default function App() {
   const route = useRoute()
@@ -22,8 +23,9 @@ export default function App() {
     <AudioProvider>
       {route.view === 'read' && route.id ? <Reader key={route.id} id={route.id} />
         : route.view === 'listen' && route.id ? <PlayerScreen key={route.id} id={route.id} />
+        : route.view === 'stats' ? <StatsScreen />
         : <Library />}
-      {route.view === 'library' && <MiniPlayer />}
+      {(route.view === 'library' || route.view === 'stats') && <MiniPlayer />}
     </AudioProvider>
   )
 }

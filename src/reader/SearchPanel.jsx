@@ -10,11 +10,16 @@ export default function SearchPanel({ view, state, onSelect, onClose }) {
   const runId = useRef(0)
   const inputRef = useRef()
 
-  useEffect(() => { if (!state.results.length) inputRef.current?.focus() }, [state])
-  useEffect(() => () => { runId.current++ }, []) // laufende Suche beim Schließen abbrechen
+  useEffect(() => {
+    // Aus dem Notizbuch "Im Buch suchen" → gleich loslegen
+    if (state.autoRun) search() // autoRun bleibt gesetzt, bis die Suche fertig ist
+    else if (!state.results.length) inputRef.current?.focus()
+  }, [state]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Beim Schließen: laufende Suche abbrechen, Treffer-Rahmen im Text entfernen
+  useEffect(() => () => { runId.current++; view?.clearSearch?.() }, [view])
 
   async function search(e) {
-    e.preventDefault()
+    e?.preventDefault()
     const q = query.trim()
     if (!view || q.length < 2) return
     const myRun = ++runId.current
@@ -31,6 +36,7 @@ export default function SearchPanel({ view, state, onSelect, onClose }) {
       }
     }
     setProgress(null)
+    state.autoRun = false
     state.query = q
     state.results = found
   }

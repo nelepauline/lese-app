@@ -3,17 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getBook, getFile, updateBook, listBookmarks, addBookmark, deleteBookmark, newId } from '../db/db.js'
 import { saveProgress, getProgress } from '../services/progress.js'
-import { useSettings, MARGINS } from '../settings/settings.js'
+import { useSettings, MARGINS, THEMES } from '../settings/settings.js'
 import { navigate } from '../lib/router.js'
 import { percent } from '../lib/format.js'
 import { bookCss } from './bookStyles.js'
 import Icon from '../components/Icon.jsx'
 import TocPanel from './TocPanel.jsx'
 import SearchPanel from './SearchPanel.jsx'
-import BookmarksPanel from './BookmarksPanel.jsx'
 import SettingsPanel from './SettingsPanel.jsx'
+import NotebookPanel from './NotebookPanel.jsx'
+import HighlightSheet from './HighlightSheet.jsx'
+import { SelectionBar, ReactBar } from './HighlightBar.jsx'
 import SyncOffer from '../components/SyncOffer.jsx'
-import { checkForNewerPosition, noteBookmarkDeleted, scheduleSync } from '../services/sync/sync.js'
+import { checkForNewerPosition, noteBookmarkDeleted, scheduleSync, useSyncState } from '../services/sync/sync.js'
+import { startTracking } from '../services/stats.js'
+import { useCategories, colorOf, listHighlights, createHighlight, updateHighlight, removeHighlight } from '../services/highlights.js'
 
 export default function Reader({ id }) {
   const containerRef = useRef()
@@ -35,6 +39,24 @@ export default function Reader({ id }) {
   const [offer, setOffer] = useState(null)   // anderes Gerät war woanders
   const offerRef = useRef(null)
   const [edge, setEdge] = useState(null)     // Scroll-Modus: 'end' / 'start' eines Kapitels erreicht
+
+  // Markierungen
+  const categories = useCategories()
+  const categoriesRef = useRef(categories)
+  categoriesRef.current = categories
+  const [highlights, setHighlights] = useState([])
+  const highlightsRef = useRef([])
+  highlightsRef.current = highlights
+  const [selection, setSelection] = useState(null)   // { index, range, doc, text }
+  const [reactFor, setReactFor] = useState(null)     // gerade erstellte Markierung (Reaktions-Leiste)
+  const [hlSheet, setHlSheet] = useState(null)       // { h, note } – Markierung bearbeiten
+  const [notebookTab, setNotebookTab] = useState('highlights')
+  const annotationTapped = useRef(false)
+  // Zurück nach einem Sprung (Link, Inhaltsverzeichnis, Suche …)
+  const [canJumpBack, setCanJumpBack] = useState(false)
+  const jumping = useRef(false)
+  const sync = useSyncState()
+  const tracker = useRef(null)   // Lesezeit
 
   // ---- Buch laden ----
   useEffect(() => {
@@ -67,6 +89,32 @@ export default function Reader({ id }) {
       if (!alive) return
       applySettings(view, settingsRef.current)
 
+      // ---- Markierungen zeichnen ----
+      const { Overlayer } = await import('../vendor/foliate-js/overlayer.js')
+      view.addEventListener('draw-annotation', e => {
+        const { draw, annotation } = e.detail
+        draw(Overlayer.highlight, { color: annotation.color })
+      })
+      // Kapitel geladen → seine Markierungen einzeichnen
+      view.addEventListener('create-overlay', e => {
+        for (const h of highlightsRef.current)
+          if (view.resolveNavigation(h.cfi)?.index === e.detail.index) view.addAnnotation(annotationFor(h))
+      })
+      view.addEventListener('show-annotation', e => {
+        const h = highlightsRef.current.find(x => x.cfi === e.detail.value)
+        if (!h) return
+        annotationTapped.current = true
+        setHlSheet({ h })
+      })
+      // Sprünge merken → "Zurück"-Knopf
+      view.addEventListener('link', () => markJump())
+      view.history.addEventListener('index-change', () => {
+        if (!view.history.canGoBack) setCanJumpBack(false)
+      })
+      const hls = await listHighlights(id)
+      highlightsRef.current = hls
+      setHighlights(hls)
+
       view.addEventListener('relocate', e => {
         const d = e.detail
         const range = d.range
@@ -91,6 +139,7 @@ export default function Reader({ id }) {
         }
         setLoc(next)
         setEdge(scrollEdge(view))
+        tracker.current?.activity()
         // Fortschritt speichern (gebündelt, nicht bei jedem Scrollschritt)
         clearTimeout(saveTimer)
         saveTimer = setTimeout(() => saveProgress(id, {
@@ -104,6 +153,8 @@ export default function Reader({ id }) {
 
       // Ohne gespeicherten Stand: am Anfang des eigentlichen Textes beginnen
       await view.init({ lastLocation: progress?.cfi, showTextStart: true })
+      if (!alive) return
+      tracker.current = startTracking('read', book)
       setToc(view.book.toc ?? [])
       setReady(true)
 
@@ -112,6 +163,7 @@ export default function Reader({ id }) {
       offerRef.current = o
       setOffer(o)
       setBookmarks(await listBookmarks(id)) // evtl. neue Lesezeichen von anderen Geräten
+      reloadHighlights()
     }
 
     open().catch(err => { console.error(err); if (alive) setError(err.message || String(err)) })
@@ -121,6 +173,8 @@ export default function Reader({ id }) {
       clearTimeout(saveTimer)
       offerRef.current?.release()
       offerRef.current = null
+      tracker.current?.stop()
+      tracker.current = null
       scheduleSync(1500)
       view?.close()
       view?.remove()
@@ -142,15 +196,35 @@ export default function Reader({ id }) {
       const frame = doc.defaultView.frameElement
       const x = (frame?.getBoundingClientRect().left ?? 0) + e.clientX
       const w = window.innerWidth
-      const view = viewRef.current
-      if (settingsRef.current.flow === 'paginated' && x < w * 0.28) view?.goLeft()
-      else if (settingsRef.current.flow === 'paginated' && x > w * 0.72) view?.goRight()
-      else setChrome(c => !c)
+      // Kurz warten: Tippen auf eine Markierung öffnet diese statt zu blättern
+      annotationTapped.current = false
+      setTimeout(() => {
+        if (annotationTapped.current) return
+        const view = viewRef.current
+        if (settingsRef.current.flow === 'paginated' && x < w * 0.28) view?.goLeft()
+        else if (settingsRef.current.flow === 'paginated' && x > w * 0.72) view?.goRight()
+        else setChrome(c => !c)
+      }, 0)
+    })
+    // Text markiert → Leiste mit Kategorien zeigen
+    let selTimer
+    doc.addEventListener('selectionchange', () => {
+      clearTimeout(selTimer)
+      selTimer = setTimeout(() => {
+        const sel = doc.getSelection()
+        const text = sel?.toString().trim()
+        if (!sel || sel.isCollapsed || !text) { setSelection(s => s?.doc === doc ? null : s); return }
+        const index = viewRef.current?.renderer.getContents().find(c => c.doc === doc)?.index
+        if (index == null) return
+        setReactFor(null)
+        setSelection({ index, range: sel.getRangeAt(0).cloneRange(), doc, text })
+      }, 250)
     })
     doc.addEventListener('keydown', onKey)
     // Scroll-Modus: am Kapitelende weiterziehen → nächstes Kapitel
     doc.addEventListener('wheel', onWheel, { passive: true })
     doc.addEventListener('touchstart', onTouchStart, { passive: true })
+    doc.addEventListener('pointerdown', () => tracker.current?.activity(), { passive: true })
     doc.addEventListener('touchend', onTouchEnd, { passive: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -248,7 +322,99 @@ export default function Reader({ id }) {
     setOffer(null)
   }
 
-  const goTo = target => { viewRef.current?.goTo(target); setPanel(null) }
+  // ---- Markierungen ----
+  function annotationFor(h) {
+    const cat = categoriesRef.current.find(c => c.id === h.catId)
+    return { value: h.cfi, color: colorOf(cat?.color).mark }
+  }
+  async function reloadHighlights() {
+    const view = viewRef.current
+    const fresh = await listHighlights(id)
+    const old = highlightsRef.current
+    // Weggefallene entfernen, alle anderen (neu) zeichnen
+    for (const h of old) if (!fresh.some(f => f.cfi === h.cfi)) view?.deleteAnnotation({ value: h.cfi })
+    highlightsRef.current = fresh
+    setHighlights(fresh)
+    for (const h of fresh) view?.addAnnotation(annotationFor(h))
+  }
+  // Farbe einer Kategorie geändert → neu zeichnen
+  useEffect(() => {
+    if (!ready) return
+    for (const h of highlightsRef.current) viewRef.current?.addAnnotation(annotationFor(h))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories, ready])
+  // Abgleich hat Daten geändert → neu laden
+  useEffect(() => { if (ready) reloadHighlights() }, [sync.dataVersion]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function highlightSelection(cat) {
+    const view = viewRef.current, s = selection
+    if (!view || !s) return null
+    const cfi = view.getCFI(s.index, s.range)
+    const existing = highlightsRef.current.find(h => h.cfi === cfi)
+    const h = existing
+      ? await updateHighlight(existing, { catId: cat.id })
+      : await createHighlight({
+        bookId: id, cfi, text: s.text.replace(/\s+/g, ' ').slice(0, 2000), context: contextOf(s.range),
+        chapter: loc?.chapter ?? '', fraction: loc?.fraction ?? null, catId: cat.id,
+      })
+    s.doc.getSelection()?.removeAllRanges()
+    setSelection(null)
+    const list = [...highlightsRef.current.filter(x => x.id !== h.id), h].sort((a, b) => (a.fraction ?? 0) - (b.fraction ?? 0))
+    highlightsRef.current = list
+    setHighlights(list)
+    view.addAnnotation(annotationFor(h))
+    return h
+  }
+  async function pickCategory(cat) {
+    const h = await highlightSelection(cat)
+    if (h) setReactFor(h)
+  }
+  async function noteFromSelection() {
+    const cat = categoriesRef.current.find(c => c.id === 'other') ?? categoriesRef.current.at(-1)
+    const h = await highlightSelection(cat)
+    if (h) setHlSheet({ h, note: true })
+  }
+  function replaceHighlight(h) {
+    const list = highlightsRef.current.map(x => x.id === h.id ? h : x)
+    highlightsRef.current = list
+    setHighlights(list)
+    viewRef.current?.addAnnotation(annotationFor(h))
+    setReactFor(r => r?.id === h.id ? h : r)
+  }
+  async function react(key) {
+    const h = reactFor
+    if (!h) return
+    replaceHighlight(await updateHighlight(h, { reaction: h.reaction === key ? '' : key }))
+  }
+  async function deleteHl(h) {
+    if (!confirm('Markierung löschen?')) return
+    await removeHighlight(h)
+    viewRef.current?.deleteAnnotation({ value: h.cfi })
+    const list = highlightsRef.current.filter(x => x.id !== h.id)
+    highlightsRef.current = list
+    setHighlights(list)
+    setHlSheet(null)
+  }
+  function searchFor(text) {
+    searchState.current = { query: text.trim(), results: [], autoRun: true }
+    setHlSheet(null)
+    setPanel('search')
+  }
+
+  // ---- Sprünge & Zurück ----
+  function markJump() {
+    jumping.current = true
+    setTimeout(() => {
+      jumping.current = false
+      if (viewRef.current?.history.canGoBack) setCanJumpBack(true)
+    }, 400)
+  }
+  function jumpBack() {
+    viewRef.current?.history.back()
+    setCanJumpBack(false)
+  }
+
+  const goTo = target => { markJump(); viewRef.current?.goTo(target); setPanel(null) }
   const closePanel = useCallback(() => setPanel(null), [])
 
   return (
@@ -258,7 +424,9 @@ export default function Reader({ id }) {
         <div className="reader-title">{meta?.title}</div>
         <button className="icon-btn" onClick={() => setPanel('toc')} aria-label="Inhalt"><Icon name="list" /></button>
         <button className="icon-btn" onClick={() => setPanel('search')} aria-label="Suchen"><Icon name="search" /></button>
-        <button className="icon-btn" onClick={() => setPanel('bookmarks')} aria-label="Lesezeichen-Liste"><Icon name="bookmark" /></button>
+        <button className="icon-btn" onClick={() => { setNotebookTab('highlights'); setPanel('notebook') }} aria-label="Notizbuch: Markierungen, Lesezeichen, Bilder" title="Notizbuch">
+          <Icon name="notebook" />
+        </button>
         <button className="icon-btn" onClick={() => setPanel('settings')} aria-label="Darstellung"><Icon name="text" /></button>
       </header>
 
@@ -266,6 +434,23 @@ export default function Reader({ id }) {
         aria-label={current ? 'Lesezeichen entfernen' : 'Lesezeichen setzen'} disabled={!ready}>
         <Icon name={current ? 'bookmarkFilled' : 'bookmark'} />
       </button>
+
+      {canJumpBack && (
+        <div className="jump-back">
+          <button className="btn" onClick={jumpBack}><Icon name="back" size={16} /> Zurück</button>
+          <button className="icon-btn small" onClick={() => setCanJumpBack(false)} aria-label="Ausblenden"><Icon name="close" size={14} /></button>
+        </div>
+      )}
+
+      {selection && !panel && (
+        <SelectionBar categories={categories} onPick={pickCategory} onNote={noteFromSelection}
+          onCancel={() => { selection.doc.getSelection()?.removeAllRanges(); setSelection(null) }} />
+      )}
+      {reactFor && !selection && !panel && !hlSheet && (
+        <ReactBar highlight={reactFor} category={categories.find(c => c.id === reactFor.catId)}
+          onReact={react} onOpen={() => { setHlSheet({ h: reactFor, note: true }); setReactFor(null) }}
+          onClose={() => setReactFor(null)} />
+      )}
 
       {offer && <SyncOffer offer={offer} onJump={() => answerOffer(true)} onStay={() => answerOffer(false)} />}
 
@@ -297,10 +482,29 @@ export default function Reader({ id }) {
 
       {panel === 'toc' && <TocPanel toc={toc} currentHref={loc?.tocHref} onSelect={goTo} onClose={closePanel} />}
       {panel === 'search' && <SearchPanel view={viewRef.current} state={searchState.current} onSelect={goTo} onClose={closePanel} />}
-      {panel === 'bookmarks' && <BookmarksPanel bookmarks={bookmarks} onSelect={goTo} onDelete={removeBookmark} onClose={closePanel} />}
+      {panel === 'notebook' && (
+        <NotebookPanel bookId={id} tab={notebookTab} highlights={highlights} categories={categories} bookmarks={bookmarks}
+          onSelect={goTo} onDeleteBookmark={removeBookmark} onClose={closePanel}
+          onOpenHighlight={h => { setPanel(null); setHlSheet({ h }) }} onSearch={searchFor} />
+      )}
+      {hlSheet && (
+        <HighlightSheet key={hlSheet.h.id} highlight={hlSheet.h} categories={categories} autoFocusNote={hlSheet.note}
+          onChange={replaceHighlight} onDelete={deleteHl} onSearch={searchFor} onClose={() => setHlSheet(null)} />
+      )}
       {panel === 'settings' && <SettingsPanel onClose={closePanel} />}
     </div>
   )
+}
+
+// Etwas Text vor und nach der Markierung (für die Übersicht)
+function contextOf(range) {
+  try {
+    const block = range.startContainer.parentElement?.closest('p, li, blockquote, div, h1, h2, h3, h4, td') ?? range.startContainer.parentElement
+    const before = range.cloneRange(); before.selectNodeContents(block); before.setEnd(range.startContainer, range.startOffset)
+    const after = range.cloneRange(); after.selectNodeContents(block); after.setStart(range.endContainer, range.endOffset)
+    const clean = t => t.replace(/\s+/g, ' ')
+    return { pre: clean(before.toString()).slice(-60).trimStart(), post: clean(after.toString()).slice(0, 60).trimEnd() }
+  } catch { return null }
 }
 
 // Im Scroll-Modus: Steht man am Anfang oder Ende des aktuellen Kapitels?
@@ -340,4 +544,8 @@ function applySettings(view, s) {
   r.setAttribute('max-inline-size', '720px')
   r.setAttribute('max-column-count', '2')
   r.setStyles?.(bookCss(s))
+  // Pastellfarben: auf hellem Papier "multiplizieren", im Dunkeln etwas zurücknehmen
+  const dark = !!THEMES[s.theme]?.dark
+  view.style.setProperty('--overlayer-highlight-opacity', dark ? '.38' : '.6')
+  view.style.setProperty('--overlayer-highlight-blend-mode', dark ? 'normal' : 'multiply')
 }

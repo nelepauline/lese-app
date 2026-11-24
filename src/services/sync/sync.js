@@ -7,12 +7,22 @@
 //    vermerkt, damit sie nicht von einem anderen Gerät zurückkommen.
 //  - Selbst bearbeitete Angaben (Titel, Autor/in, Serie, Band) und eigene
 //    Cover: die neueste Änderung gewinnt. Cover liegen in einem zweiten Gist.
+//  - Markierungen (mit Reaktion und Notiz): je Markierung gewinnt die neueste
+//    Änderung; gelöschte werden vermerkt. Eigene Bilder: Angaben in der
+//    Hauptdatei, das Bild selbst im zweiten Gist.
+//  - Markier-Kategorien und Tagesziel: die neueste Änderung gewinnt.
+//  - Lese-/Hörzeit: jedes Gerät schreibt nur seinen eigenen Eintrag.
 //
 // Ablauf: gelesen wird beim Start, beim Zurückkehren in die App und beim
 // Öffnen eines Buchs. Geschrieben wird gesammelt (höchstens alle 30 Sek.)
 // und sofort, wenn die App in den Hintergrund geht.
 import { useSyncExternalStore } from 'react'
-import { listBooks, getAllProgress, listBookmarks, addBookmark, deleteBookmark, getBook, getProgress, newId, updateBook, getCover, putCover } from '../../db/db.js'
+import {
+  listBooks, getAllProgress, listBookmarks, addBookmark, deleteBookmark, getBook, getProgress, newId, updateBook, getCover, putCover,
+  listHighlights, putHighlight, deleteHighlight, listImages, putImage, deleteImage,
+} from '../../db/db.js'
+import { getCategoryData, applyRemoteCategories } from '../highlights.js'
+import { localStatsForSync, goalForSync, applyRemoteStats, setStatsSyncHook } from '../stats.js'
 import { registerSyncTarget } from '../progress.js'
 import { bookKey } from './fingerprint.js'
 import * as gist from './githubGist.js'
@@ -140,6 +150,21 @@ async function merge(remote, tombs) {
   const [books, progress] = await Promise.all([listBooks(), getAllProgress()])
   let changed = false, localChanged = false
   const coverUploads = {}, coverDownloads = []
+  const mediaUploads = {}, imageDownloads = []
+
+  // Kategorien: die neuere Liste gewinnt
+  const cats = getCategoryData()
+  if (cats.updatedAt > (remote.categories?.updatedAt ?? 0)) { remote.categories = cats; changed = true }
+  else if (applyRemoteCategories(remote.categories)) localChanged = true
+
+  // Lese-/Hörzeit: nur den eigenen Eintrag schreiben
+  remote.stats ??= { devices: {} }
+  remote.stats.devices ??= {}
+  const mine = { name: me.name, ...localStatsForSync() }
+  if (JSON.stringify(remote.stats.devices[me.id]) !== JSON.stringify(mine)) { remote.stats.devices[me.id] = mine; changed = true }
+  const goal = goalForSync()
+  if (goal.updatedAt > (remote.stats.goal?.updatedAt ?? 0)) { remote.stats.goal = goal; changed = true }
+  applyRemoteStats(remote.stats.devices, me.id, remote.stats.goal)
 
   for (const book of books) {
     const key = await bookKey(book)
@@ -190,6 +215,53 @@ async function merge(remote, tombs) {
       changed = true
     }
 
+    // Markierungen: je Markierung gewinnt die neuere Änderung
+    entry.highlights ??= {}
+    const hls = await listHighlights(book.id)
+    const hlIds = new Set(hls.map(h => h.id))
+    for (const h of hls) {
+      const r = entry.highlights[h.id]
+      if (r?.deleted) { await deleteHighlight(h.id); localChanged = true }
+      else if (!r || h.updatedAt > r.updatedAt) {
+        const { id: _id, bookId: _b, ...data } = h
+        entry.highlights[h.id] = data
+        changed = true
+      } else if (r.updatedAt > h.updatedAt) {
+        await putHighlight({ ...r, id: h.id, bookId: book.id }); localChanged = true
+      }
+    }
+    for (const [hid, r] of Object.entries(entry.highlights)) {
+      if (r.deleted || hlIds.has(hid)) continue
+      if (tombs[hid]) { entry.highlights[hid] = { deleted: tombs[hid] }; changed = true }
+      else { await putHighlight({ ...r, id: hid, bookId: book.id }); localChanged = true }
+    }
+
+    // Eigene Bilder: Angaben hier, Bild-Inhalt im zweiten Gist
+    entry.images ??= {}
+    const imgs = await listImages(book.id)
+    const imgIds = new Set(imgs.map(i => i.id))
+    for (const img of imgs) {
+      const r = entry.images[img.id]
+      if (r?.deleted) { await deleteImage(img.id); localChanged = true }
+      else if (!r) {
+        mediaUploads[`img-${img.id}.txt`] = await blobToDataUrl(img.blob)
+        entry.images[img.id] = { name: img.name, createdAt: img.createdAt, updatedAt: img.updatedAt }
+        changed = true
+      } else if (img.updatedAt > r.updatedAt) {
+        entry.images[img.id] = { ...r, name: img.name, updatedAt: img.updatedAt }; changed = true
+      } else if (r.updatedAt > img.updatedAt) {
+        await putImage({ ...img, name: r.name, updatedAt: r.updatedAt }); localChanged = true
+      }
+    }
+    for (const [iid, r] of Object.entries(entry.images)) {
+      if (r.deleted || imgIds.has(iid)) continue
+      if (tombs[iid]) {
+        entry.images[iid] = { deleted: tombs[iid] }
+        mediaUploads[`img-${iid}.txt`] = null // Bild im Gist löschen
+        changed = true
+      } else imageDownloads.push({ id: iid, bookId: book.id, ...r })
+    }
+
     // Lesezeichen zusammenführen
     const local = await listBookmarks(book.id)
     const localIds = new Set(local.map(b => b.id))
@@ -211,15 +283,22 @@ async function merge(remote, tombs) {
     }
   }
 
-  // Cover hochladen (vor der Hauptdatei, damit nie auf ein fehlendes Bild verwiesen wird)
-  if (Object.keys(coverUploads).length) {
+  // Cover und Bilder hochladen (vor der Hauptdatei, damit nie auf ein fehlendes Bild verwiesen wird)
+  const uploads = { ...coverUploads, ...mediaUploads }
+  if (Object.keys(uploads).length) {
     remote.coversGist ||= await gist.createCoversGist(conf.token)
-    await gist.writeFiles(conf.token, remote.coversGist, coverUploads)
+    await gist.writeFiles(conf.token, remote.coversGist, uploads)
   }
-  // Neuere Cover von anderen Geräten holen
-  if (coverDownloads.length && remote.coversGist) {
+  // Neuere Cover und neue Bilder von anderen Geräten holen
+  if ((coverDownloads.length || imageDownloads.length) && remote.coversGist) {
     try {
       const files = await gist.readFiles(conf.token, remote.coversGist)
+      for (const img of imageDownloads) {
+        const url = files[`img-${img.id}.txt`]
+        if (!url?.startsWith('data:image/')) continue
+        await putImage({ id: img.id, bookId: img.bookId, name: img.name, blob: await dataUrlToBlob(url), createdAt: img.createdAt, updatedAt: img.updatedAt })
+        localChanged = true
+      }
       for (const { book, key, updatedAt } of coverDownloads) {
         const url = files[`${key}.txt`]
         if (!url?.startsWith('data:image/')) continue
@@ -264,7 +343,11 @@ export async function checkForNewerPosition(bookId, baseline) {
   return { remote: rp, release }
 }
 
-// Lesezeichen gelöscht → vermerken, damit es auch auf anderen Geräten verschwindet
+// Lesezeichen/Markierung/Bild gelöscht → vermerken, damit es auch auf anderen
+// Geräten verschwindet (die IDs sind eindeutig, daher eine gemeinsame Liste)
+export function noteDeleted(id) {
+  return noteBookmarkDeleted(id)
+}
 export function noteBookmarkDeleted(id) {
   if (!conf?.token) return
   const t = load(TOMB_KEY, {})
@@ -309,6 +392,7 @@ export function initSync() {
   started = true
   // Jede gespeicherte Position (Reader & Player) plant einen Abgleich ein
   registerSyncTarget({ push: async () => scheduleSync() })
+  setStatsSyncHook(() => scheduleSync())
   document.addEventListener('visibilitychange', () => {
     if (!conf?.token) return
     if (document.visibilityState === 'visible') syncNow().catch(() => {})

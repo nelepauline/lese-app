@@ -3,7 +3,7 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'lese-app'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 /*
   Tabellen ("Stores"):
@@ -12,6 +12,9 @@ const DB_VERSION = 1
   - covers:    Coverbild als Blob, Schlüssel = book.id
   - progress:  Lese-/Hörstand, Schlüssel = book.id
   - bookmarks: Lesezeichen { id, bookId, cfi, label, excerpt, fraction, createdAt }
+  - highlights: Markierungen { id, bookId, cfi, text, chapter, fraction, catId, reaction, note,
+                createdAt, updatedAt }                                          (ab Version 2)
+  - images:    eigene Bilder zum Buch, z. B. Karten { id, bookId, name, blob, createdAt, updatedAt }
 
   Buch-Typen:
   - 'epub'       normales E-Book
@@ -27,13 +30,19 @@ const DB_VERSION = 1
 let dbPromise
 function db() {
   dbPromise ??= openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      db.createObjectStore('books', { keyPath: 'id' })
-      db.createObjectStore('files')
-      db.createObjectStore('covers')
-      db.createObjectStore('progress')
-      const bm = db.createObjectStore('bookmarks', { keyPath: 'id' })
-      bm.createIndex('bookId', 'bookId')
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        db.createObjectStore('books', { keyPath: 'id' })
+        db.createObjectStore('files')
+        db.createObjectStore('covers')
+        db.createObjectStore('progress')
+        const bm = db.createObjectStore('bookmarks', { keyPath: 'id' })
+        bm.createIndex('bookId', 'bookId')
+      }
+      if (oldVersion < 2) {
+        db.createObjectStore('highlights', { keyPath: 'id' }).createIndex('bookId', 'bookId')
+        db.createObjectStore('images', { keyPath: 'id' }).createIndex('bookId', 'bookId')
+      }
     },
   })
   return dbPromise
@@ -70,12 +79,16 @@ export async function addBook(book, file, cover) {
 export async function deleteBook(id) {
   const d = await db()
   const bms = await d.getAllKeysFromIndex('bookmarks', 'bookId', id)
-  const tx = d.transaction(['books', 'files', 'covers', 'progress', 'bookmarks'], 'readwrite')
+  const hls = await d.getAllKeysFromIndex('highlights', 'bookId', id)
+  const imgs = await d.getAllKeysFromIndex('images', 'bookId', id)
+  const tx = d.transaction(['books', 'files', 'covers', 'progress', 'bookmarks', 'highlights', 'images'], 'readwrite')
   tx.objectStore('books').delete(id)
   tx.objectStore('files').delete(id)
   tx.objectStore('covers').delete(id)
   tx.objectStore('progress').delete(id)
   for (const key of bms) tx.objectStore('bookmarks').delete(key)
+  for (const key of hls) tx.objectStore('highlights').delete(key)
+  for (const key of imgs) tx.objectStore('images').delete(key)
   await tx.done
 }
 
@@ -134,6 +147,30 @@ export async function addBookmark(bookmark) {
 }
 export async function deleteBookmark(id) {
   return (await db()).delete('bookmarks', id)
+}
+
+// ---- Markierungen ----
+export async function listHighlights(bookId) {
+  const list = await (await db()).getAllFromIndex('highlights', 'bookId', bookId)
+  return list.sort((a, b) => (a.fraction ?? 0) - (b.fraction ?? 0))
+}
+export async function putHighlight(h) {
+  return (await db()).put('highlights', h)
+}
+export async function deleteHighlight(id) {
+  return (await db()).delete('highlights', id)
+}
+
+// ---- Eigene Bilder ----
+export async function listImages(bookId) {
+  const list = await (await db()).getAllFromIndex('images', 'bookId', bookId)
+  return list.sort((a, b) => a.createdAt - b.createdAt)
+}
+export async function putImage(img) {
+  return (await db()).put('images', img)
+}
+export async function deleteImage(id) {
+  return (await db()).delete('images', id)
 }
 
 // Bittet den Browser, die Daten nicht automatisch zu löschen,

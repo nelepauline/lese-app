@@ -2,6 +2,7 @@
 //   #/              → Bibliothek
 //   #/read/<id>     → E-Book lesen
 //   #/listen/<id>   → Hörbuch hören
+//   #/stats         → Übersicht (Lesezeit, Streak)
 import { useEffect, useState } from 'react'
 
 function parse() {

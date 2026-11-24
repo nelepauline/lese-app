@@ -13,6 +13,7 @@ import CloudPanel from './CloudPanel.jsx'
 import { useCloudState, download, removeDownload, signIn, clearError, PROVIDER_NAME } from '../services/cloud/cloudLibrary.js'
 import EditBook from './EditBook.jsx'
 import ViewPanel from './ViewPanel.jsx'
+import { useStats } from '../services/stats.js'
 import { seriesLabel, seriesNumber, bandLabel } from '../services/bookMeta.js'
 
 const FILTERS = [
@@ -60,6 +61,7 @@ export default function Library() {
   const sync = useSyncState()
   const [showSync, setShowSync] = useState(false)
   const cloud = useCloudState()
+  const stats = useStats()
   const [showCloud, setShowCloud] = useState(false)
   const [sort, setSort] = useState(() => localStorage.getItem('lib-sort') || 'recent')
   const [editing, setEditing] = useState(null)
@@ -269,6 +271,10 @@ export default function Library() {
               <Icon name="cloud" />
             </button>
           )}
+          <button className={`streak-btn ${stats.metToday ? 'met' : ''}`} onClick={() => navigate('/stats')}
+            aria-label={`Übersicht – Streak ${stats.streak} Tage`} title="Übersicht: Lesezeit und Streak">
+            <Icon name="flame" size={20} /> <span>{stats.streak}</span>
+          </button>
           <button className={`icon-btn ${sync.connected ? (sync.error ? 'sync-warn' : 'sync-on') : ''}`}
             onClick={() => setShowSync(true)} aria-label="Geräte abgleichen" title="Geräte abgleichen">
             <Icon name="sync" />

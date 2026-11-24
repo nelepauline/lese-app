@@ -105,6 +105,7 @@ export async function readFiles(token, id) {
 }
 
 export async function writeFiles(token, id, files) {
-  const body = { files: Object.fromEntries(Object.entries(files).map(([n, content]) => [n, { content }])) }
+  // content null → Datei im Gist löschen
+  const body = { files: Object.fromEntries(Object.entries(files).map(([n, content]) => [n, content == null ? null : { content }])) }
   await gh(token, `/gists/${id}`, { method: 'PATCH', body })
 }
