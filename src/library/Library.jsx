@@ -94,10 +94,12 @@ export default function Library() {
       <header className="library-header">
         <h1>Bibliothek</h1>
         <div className="header-actions">
-          <button className={`icon-btn ${cloud.folder ? (cloud.error ? 'sync-warn' : 'sync-on') : ''}`}
-            onClick={() => setShowCloud(true)} aria-label={`${PROVIDER_NAME}-Ordner`} title={`${PROVIDER_NAME}-Ordner`}>
-            <Icon name="cloud" />
-          </button>
+          {cloud.configured && (
+            <button className={`icon-btn ${cloud.folder ? (cloud.error ? 'sync-warn' : 'sync-on') : ''}`}
+              onClick={() => setShowCloud(true)} aria-label={`${PROVIDER_NAME}-Ordner`} title={`${PROVIDER_NAME}-Ordner`}>
+              <Icon name="cloud" />
+            </button>
+          )}
           <button className={`icon-btn ${sync.connected ? (sync.error ? 'sync-warn' : 'sync-on') : ''}`}
             onClick={() => setShowSync(true)} aria-label="Geräte abgleichen" title="Geräte abgleichen">
             <Icon name="sync" />
@@ -142,7 +144,7 @@ export default function Library() {
           <h2>Noch keine Bücher</h2>
           <p>Tippe auf „Hinzufügen“ und wähle EPUB-Bücher oder M4B-Hörbücher aus.
             Sie werden auf diesem Gerät gespeichert und sind danach offline verfügbar.
-            Oder verbinde über das Wolken-Symbol einen {PROVIDER_NAME}-Ordner.</p>
+            {cloud.configured && <> Oder verbinde über das Wolken-Symbol einen {PROVIDER_NAME}-Ordner.</>}</p>
         </div>
       )}
 
