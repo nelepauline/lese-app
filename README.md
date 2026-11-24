@@ -83,6 +83,9 @@ Unter jedem Buch in der Bibliothek auf **„…“** tippen: Dort lassen sich Ti
 Band-Nummer und Cover ändern (die Datei selbst bleibt unverändert). Über **Sortieren → Serie**
 stehen die Bände einer Serie der Reihe nach unter einer Überschrift. Löschen geht ebenfalls dort.
 
+Neben „Sortieren“ öffnet das Symbol rechts die **Ansicht**: Raster, Liste oder Regal
+(Cover auf Regalbrettern) und die Cover-Größe (Klein, Mittel, Groß).
+
 ## 4. Geräte abgleichen (über GitHub)
 Auf **jedem** Gerät einmal einrichten:
 1. In der Bibliothek oben auf das **Pfeil-Symbol** (zwei Pfeile im Kreis) tippen.

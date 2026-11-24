@@ -34,6 +34,7 @@ export default function Reader({ id }) {
   const searchState = useRef({ query: '', results: [] })
   const [offer, setOffer] = useState(null)   // anderes Gerät war woanders
   const offerRef = useRef(null)
+  const [edge, setEdge] = useState(null)     // Scroll-Modus: 'end' / 'start' eines Kapitels erreicht
 
   // ---- Buch laden ----
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function Reader({ id }) {
           excerpt: range?.toString().trim().replace(/\s+/g, ' ').slice(0, 140) ?? '',
         }
         setLoc(next)
+        setEdge(scrollEdge(view))
         // Fortschritt speichern (gebündelt, nicht bei jedem Scrollschritt)
         clearTimeout(saveTimer)
         saveTimer = setTimeout(() => saveProgress(id, {
@@ -97,6 +99,8 @@ export default function Reader({ id }) {
       })
 
       view.addEventListener('load', e => attachPageHandlers(e.detail.doc))
+      // Mausrad/Trackpad über dem Rand neben dem Text
+      view.addEventListener('wheel', onWheel, { passive: true })
 
       // Ohne gespeicherten Stand: am Anfang des eigentlichen Textes beginnen
       await view.init({ lastLocation: progress?.cfi, showTextStart: true })
@@ -144,7 +148,62 @@ export default function Reader({ id }) {
       else setChrome(c => !c)
     })
     doc.addEventListener('keydown', onKey)
+    // Scroll-Modus: am Kapitelende weiterziehen → nächstes Kapitel
+    doc.addEventListener('wheel', onWheel, { passive: true })
+    doc.addEventListener('touchstart', onTouchStart, { passive: true })
+    doc.addEventListener('touchend', onTouchEnd, { passive: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // ---- Scroll-Modus: Kapitelwechsel durch Weiterscrollen ----
+  // foliate-js zeigt im Scroll-Modus immer nur ein Kapitel. Ist man an dessen
+  // Ende (oder Anfang) und scrollt weiter, wird das nächste (vorige) geladen.
+  const turning = useRef(false)
+  const wheelSum = useRef(0)
+  const wheelTimer = useRef(null)
+  const touch = useRef(null)
+
+  const turnSection = useCallback(async dir => {
+    const view = viewRef.current
+    if (!view || turning.current) return
+    // Vor dem ersten bzw. nach dem letzten Kapitel gibt es nichts – foliate-js
+    // würde sonst hängen bleiben.
+    if (!hasAdjacentSection(view, dir)) return
+    turning.current = true
+    wheelSum.current = 0
+    try { await (dir > 0 ? view.renderer.next() : view.renderer.prev()) }
+    catch (err) { console.warn(err) }
+    finally { setTimeout(() => { turning.current = false }, 500) }
+  }, [])
+
+  const onWheel = useCallback(e => {
+    const view = viewRef.current
+    if (settingsRef.current.flow !== 'scrolled' || !view) return
+    const at = edgeOf(view.renderer)
+    const dir = e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0
+    if (!dir || (dir > 0 && at !== 'end') || (dir < 0 && at !== 'start')) { wheelSum.current = 0; return }
+    // erst nach einem deutlichen "Weiterdrücken" umschalten
+    wheelSum.current += Math.abs(e.deltaY)
+    clearTimeout(wheelTimer.current)
+    wheelTimer.current = setTimeout(() => { wheelSum.current = 0 }, 400)
+    if (wheelSum.current > 220) turnSection(dir)
+  }, [turnSection])
+
+  const onTouchStart = useCallback(e => {
+    const view = viewRef.current
+    if (settingsRef.current.flow !== 'scrolled' || !view) return
+    touch.current = { y: e.touches[0]?.screenY ?? 0, at: edgeOf(view.renderer) }
+  }, [])
+
+  const onTouchEnd = useCallback(e => {
+    const view = viewRef.current, t = touch.current
+    touch.current = null
+    if (!t || !view || settingsRef.current.flow !== 'scrolled') return
+    const dy = t.y - (e.changedTouches[0]?.screenY ?? t.y) // > 0: nach oben gewischt (weiterlesen)
+    const at = edgeOf(view.renderer)
+    if (dy > 70 && t.at === 'end' && at === 'end') turnSection(1)
+    else if (dy < -70 && t.at === 'start' && at === 'start') turnSection(-1)
+  }, [turnSection])
 
   // ---- Tastatur (Mac) ----
   const onKey = useCallback(e => {
@@ -210,6 +269,12 @@ export default function Reader({ id }) {
 
       {offer && <SyncOffer offer={offer} onJump={() => answerOffer(true)} onStay={() => answerOffer(false)} />}
 
+      {settings.flow === 'scrolled' && edge === 'end' && (
+        <button className="section-continue" onClick={() => turnSection(1)}>
+          Weiterziehen oder tippen für das nächste Kapitel
+        </button>
+      )}
+
       <main className="reader-view" ref={containerRef}>
         {!ready && !error && <div className="reader-loading">Buch wird geöffnet …</div>}
         {error && <div className="reader-loading">Fehler: {error}</div>}
@@ -236,6 +301,33 @@ export default function Reader({ id }) {
       {panel === 'settings' && <SettingsPanel onClose={closePanel} />}
     </div>
   )
+}
+
+// Im Scroll-Modus: Steht man am Anfang oder Ende des aktuellen Kapitels?
+// (Ein Kapitel, das ganz auf den Bildschirm passt, zählt als beides → 'end')
+function edgeOf(renderer) {
+  if (!renderer?.scrolled) return null
+  const { start, end, viewSize } = renderer
+  if (viewSize - end <= 4) return 'end'
+  if (start <= 1) return 'start'
+  return null
+}
+
+// Gibt es vor (dir -1) bzw. nach (dir 1) dem aktuellen Kapitel noch eins?
+function hasAdjacentSection(view, dir) {
+  const sections = view.book?.sections ?? []
+  const current = view.lastLocation?.section?.current
+  if (current == null) return false
+  for (let i = current + dir; i >= 0 && i < sections.length; i += dir)
+    if (sections[i]?.linear !== 'no') return true
+  return false
+}
+
+function scrollEdge(view) {
+  const at = edgeOf(view.renderer)
+  // nach dem letzten Kapitel gibt es nichts mehr
+  if (at === 'end' && !hasAdjacentSection(view, 1)) return null
+  return at
 }
 
 function applySettings(view, s) {

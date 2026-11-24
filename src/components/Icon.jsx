@@ -4,6 +4,8 @@ const PATHS = {
   close: <path d="M6 6l12 12M18 6L6 18" />,
   plus: <path d="M12 5v14M5 12h14" />,
   list: <path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" />,
+  grid: <><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" /><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" /><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" /><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" /></>,
+  shelf: <><rect x="5" y="4" width="4" height="12" rx=".8" /><rect x="10.5" y="6" width="4" height="10" rx=".8" /><path d="M16 6.5l3.2-.9 2.6 9.6-3.2.9z" /><path d="M2.5 19h19" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></>,
   bookmark: <path d="M6 3h12v18l-6-4.5L6 21z" />,
   bookmarkFilled: <path d="M6 3h12v18l-6-4.5L6 21z" fill="currentColor" />,

@@ -1,5 +1,5 @@
 // Bibliothek: alle Bücher und Hörbücher mit Cover, Titel, Autor und Fortschritt.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { listBooks, getAllProgress, deleteBook } from '../db/db.js'
 import { importFile } from '../services/importer.js'
 import { navigate } from '../lib/router.js'
@@ -12,6 +12,7 @@ import { useSyncState } from '../services/sync/sync.js'
 import CloudPanel from './CloudPanel.jsx'
 import { useCloudState, download, removeDownload, signIn, clearError, PROVIDER_NAME } from '../services/cloud/cloudLibrary.js'
 import EditBook from './EditBook.jsx'
+import ViewPanel from './ViewPanel.jsx'
 import { seriesLabel, seriesNumber, bandLabel } from '../services/bookMeta.js'
 
 const FILTERS = [
@@ -26,6 +27,18 @@ const SORTS = [
   ['author', 'Autor/in'],
   ['series', 'Serie'],
 ]
+
+// Mindestbreite der Cover (px) und Abstand je Größe – schmal (iPhone) / breit
+const COVER_SIZES = {
+  small:  { narrow: [66, 12], wide: [100, 16] },
+  medium: { narrow: [96, 16], wide: [140, 20] },
+  large:  { narrow: [140, 20], wide: [190, 24] },
+}
+const VIEW_KEY = 'lib-view'
+function loadView() {
+  try { return { layout: 'grid', size: 'medium', ...JSON.parse(localStorage.getItem(VIEW_KEY)) } }
+  catch { return { layout: 'grid', size: 'medium' } }
+}
 
 const byText = (a, b) => (a || '').localeCompare(b || '', 'de', { numeric: true, sensitivity: 'base' })
 // Nachname zuerst sortieren: "Jane Austen" → "Austen Jane"
@@ -50,6 +63,27 @@ export default function Library() {
   const [showCloud, setShowCloud] = useState(false)
   const [sort, setSort] = useState(() => localStorage.getItem('lib-sort') || 'recent')
   const [editing, setEditing] = useState(null)
+  const [view, setView] = useState(loadView)
+  const [showView, setShowView] = useState(false)
+  const [width, setWidth] = useState(0)
+  const rootRef = useRef()
+
+  const changeView = changes => setView(v => {
+    const next = { ...v, ...changes }
+    try { localStorage.setItem(VIEW_KEY, JSON.stringify(next)) } catch { /* egal */ }
+    return next
+  })
+
+  // Breite der Bibliothek messen (für Regal-Reihen und Cover-Größe)
+  useLayoutEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([e]) => setWidth(e.contentRect.width))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const [coverMin, coverGap] = COVER_SIZES[view.size]?.[width >= 640 ? 'wide' : 'narrow'] ?? COVER_SIZES.medium.narrow
+  const columns = Math.max(2, Math.floor((width + coverGap) / (coverMin + coverGap)) || 2)
 
   const refresh = useCallback(async () => {
     const [list, prog] = await Promise.all([listBooks(), getAllProgress()])
@@ -175,8 +209,57 @@ export default function Library() {
     )
   }
 
+  // Regal: Cover stehen auf Brettern; "…" und Fortschritt liegen auf dem Cover
+  function renderShelfBook(book) {
+    const p = progress[book.id]
+    const f = p?.fraction ?? 0
+    const inCloud = book.fileStored === false
+    const dl = cloud.downloads[book.id]
+    return (
+      <li key={book.id} className={`shelf-book ${inCloud ? 'in-cloud' : ''}`}>
+        <button className="book-open" onClick={() => open(book)} disabled={dl != null}
+          aria-label={book.title} title={[book.title, seriesLabel(book), book.author].filter(Boolean).join(' – ')}>
+          <div className="cover-wrap">
+            <Cover book={book} />
+            {book.type === 'audiobook' && <span className="badge" title="Hörbuch"><Icon name="headphones" size={14} /></span>}
+            {inCloud && dl == null && <span className="badge badge-left"><Icon name="cloud" size={14} /></span>}
+            {f > 0 && !inCloud && <div className="shelf-progress"><span style={{ width: `${f * 100}%` }} /></div>}
+            {dl != null && (
+              <div className="download-overlay">
+                <div className="download-ring" style={{ '--p': dl }} />
+                <span>{Math.round(dl * 100)} %</span>
+              </div>
+            )}
+          </div>
+        </button>
+        <button className="shelf-more" onClick={() => setEditing(book)}
+          aria-label={`„${book.title}“ bearbeiten`} title="Bearbeiten"><Icon name="more" size={16} /></button>
+      </li>
+    )
+  }
+
+  function renderGroup(list) {
+    if (view.layout === 'shelf') {
+      const rows = []
+      for (let i = 0; i < list.length; i += columns) rows.push(list.slice(i, i + columns))
+      return (
+        <div className="shelf">
+          {rows.map((row, i) => (
+            <div key={i} className="shelf-row">
+              <ul className="shelf-books" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>{row.map(renderShelfBook)}</ul>
+              <div className="shelf-board" aria-hidden="true" />
+            </div>
+          ))}
+        </div>
+      )
+    }
+    return <ul className="book-grid">{list.map(renderBook)}</ul>
+  }
+
   return (
-    <div className={`library ${audio.book ? 'has-mini-player' : ''}`}>
+    <div ref={rootRef}
+      className={`library layout-${view.layout} size-${view.size} ${audio.book ? 'has-mini-player' : ''}`}
+      style={{ '--cover-min': `${coverMin}px`, '--cover-gap': `${coverGap}px` }}>
       <header className="library-header">
         <h1>Bibliothek</h1>
         <div className="header-actions">
@@ -206,12 +289,17 @@ export default function Library() {
               <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>
             ))}
           </nav>
-          <label className="sort-select">
-            <span>Sortieren</span>
-            <select value={sort} onChange={e => setSort(e.target.value)}>
-              {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-            </select>
-          </label>
+          <div className="tools-right">
+            <label className="sort-select">
+              <span>Sortieren</span>
+              <select value={sort} onChange={e => setSort(e.target.value)}>
+                {SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+              </select>
+            </label>
+            <button className="icon-btn" onClick={() => setShowView(true)} aria-label="Ansicht" title="Ansicht">
+              <Icon name={view.layout === 'list' ? 'list' : view.layout === 'shelf' ? 'shelf' : 'grid'} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -245,12 +333,13 @@ export default function Library() {
       {groups.map(g => (
         <section key={g.name ?? 'all'} className="book-group">
           {g.name && <h2 className="group-title">{g.name} <span className="muted">{g.books.length}</span></h2>}
-          <ul className="book-grid">{g.books.map(renderBook)}</ul>
+          {renderGroup(g.books)}
         </section>
       ))}
 
       {showSync && <SyncPanel onClose={() => setShowSync(false)} />}
       {showCloud && <CloudPanel onClose={() => setShowCloud(false)} />}
+      {showView && <ViewPanel view={view} onChange={changeView} onClose={() => setShowView(false)} />}
       {editing && (
         <EditBook book={editing} allSeries={allSeries} allAuthors={allAuthors} cloudName={PROVIDER_NAME}
           onClose={() => setEditing(null)} onSaved={refresh}
